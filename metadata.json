@@ -1,0 +1,6 @@
+{
+  "name": "Kuis Interaktif Nusantara & Trivia",
+  "description": "Platform kuis trivia interaktif multi-format dengan mode Live Bareng & Bebas, sistem Buff & Debuff real-time, panel Admin CRUD, dan ekspor embed Google Sites.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

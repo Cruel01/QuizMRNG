@@ -1,0 +1,2975 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kuis Interaktif Nusantara & Trivia</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Inter & Font Awesome -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        html, body {
+            overflow-x: hidden;
+            max-width: 100%;
+            -webkit-tap-highlight-color: transparent;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #2e1065 0%, #4c1d95 50%, #1e1b4b 100%);
+            min-height: 100vh;
+            min-height: 100dvh;
+            color: #ffffff;
+        }
+        .quiz-card {
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+        .option-btn {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            touch-action: manipulation;
+        }
+        @media (hover: hover) {
+            .option-btn:hover:not(:disabled) {
+                transform: translateY(-2px);
+                box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+            }
+        }
+        .option-btn:active:not(:disabled) {
+            transform: scale(0.985);
+        }
+        @keyframes glitchShake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-3px); }
+            75% { transform: translateX(3px); }
+        }
+        .glitch-active {
+            animation: glitchShake 0.35s ease-in-out 2;
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-start sm:justify-center px-3 pt-4 pb-20 sm:p-6">
+
+    <!-- Container Utama -->
+    <div class="w-full max-w-3xl mx-auto min-w-0">
+
+        <!-- ========================================== -->
+        <!-- 1. LAYAR AWAL / LOBBY (SINGLE-ATTEMPT LOCK)-->
+        <!-- ========================================== -->
+        <div id="screen-start" class="quiz-card rounded-2xl sm:rounded-3xl p-5 sm:p-10 shadow-2xl text-center">
+            <div class="inline-flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-tr from-amber-400 to-orange-500 text-slate-950 text-2xl sm:text-3xl shadow-lg mb-3 sm:mb-4">
+                <i class="fa-solid fa-bolt"></i>
+            </div>
+
+            <!-- Badge Mode Sesi (Menunggu Admin / Bebas / Live Bareng) -->
+            <div class="mb-3">
+                <span id="lobby-mode-badge" class="inline-flex items-center justify-center gap-1.5 text-[11px] sm:text-xs font-extrabold px-3 sm:px-3.5 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/40 animate-pulse max-w-full">
+                    <i class="fa-solid fa-clock shrink-0"></i> <span class="truncate">Menunggu Admin Memilih Mode Kuis</span>
+                </span>
+            </div>
+
+            <h1 class="text-2xl sm:text-4xl font-extrabold tracking-tight mb-2.5 sm:mb-3 leading-tight">
+                Kuis Trivia Nusantara
+            </h1>
+            <p class="text-purple-200 text-xs sm:text-base max-w-lg mx-auto mb-5 sm:mb-6 leading-relaxed">
+                Uji wawasanmu dalam <strong id="lobby-total-questions-text">30 pertanyaan</strong> seru! Dapatkan <strong>Buff & Debuff</strong> dari streak jawaban benar untuk menggandakan skor atau membekukan lawan.
+            </p>
+
+            <!-- Info Kategori & Aturan -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3 mb-6 sm:mb-8 text-xs sm:text-sm">
+                <div class="bg-white/10 rounded-xl sm:rounded-2xl p-2.5 sm:p-3 border border-white/10 flex sm:block items-center justify-between px-4 sm:px-3">
+                    <div class="flex items-center gap-2 sm:block">
+                        <i class="fa-solid fa-paw text-emerald-400 text-base sm:text-lg sm:mb-1"></i>
+                        <div class="text-purple-200 text-xs sm:hidden">Manusia & Hewan</div>
+                    </div>
+                    <div id="lobby-count-cat1" class="font-bold">10 Soal</div>
+                    <div class="text-purple-200 text-xs hidden sm:block">Manusia & Hewan</div>
+                </div>
+                <div class="bg-white/10 rounded-xl sm:rounded-2xl p-2.5 sm:p-3 border border-white/10 flex sm:block items-center justify-between px-4 sm:px-3">
+                    <div class="flex items-center gap-2 sm:block">
+                        <i class="fa-solid fa-brain text-sky-400 text-base sm:text-lg sm:mb-1"></i>
+                        <div class="text-purple-200 text-xs sm:hidden">Logika & Hitungan</div>
+                    </div>
+                    <div id="lobby-count-cat2" class="font-bold">10 Soal</div>
+                    <div class="text-purple-200 text-xs hidden sm:block">Logika & Hitungan</div>
+                </div>
+                <div class="bg-white/10 rounded-xl sm:rounded-2xl p-2.5 sm:p-3 border border-white/10 flex sm:block items-center justify-between px-4 sm:px-3">
+                    <div class="flex items-center gap-2 sm:block">
+                        <i class="fa-solid fa-earth-asia text-amber-400 text-base sm:text-lg sm:mb-1"></i>
+                        <div class="text-purple-200 text-xs sm:hidden">Nusantara</div>
+                    </div>
+                    <div id="lobby-count-cat3" class="font-bold">10 Soal</div>
+                    <div class="text-purple-200 text-xs hidden sm:block">Nusantara</div>
+                </div>
+            </div>
+
+            <!-- Form Input Nama Pemain -->
+            <div class="max-w-md mx-auto space-y-3.5 sm:space-y-4">
+                <!-- Banner Menunggu Admin Menentukan Mode -->
+                <div id="awaiting-admin-mode-banner" class="bg-indigo-500/20 border-2 border-indigo-400/40 rounded-2xl p-4 sm:p-5 text-center">
+                    <div class="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-indigo-400/20 text-indigo-300 flex items-center justify-center text-xl sm:text-2xl mx-auto mb-2 animate-pulse">
+                        <i class="fa-solid fa-user-clock"></i>
+                    </div>
+                    <h3 class="font-extrabold text-base sm:text-lg text-indigo-200">Menunggu Penyelenggara (Admin)</h3>
+                    <p class="text-xs sm:text-sm text-purple-100 mt-1 leading-relaxed">
+                        Kuis belum dibuka. Halaman ini akan otomatis aktif begitu Admin memilih pelaksanaan secara <strong>Bebas</strong> atau <strong>Live Bareng</strong>.
+                    </p>
+                </div>
+
+                <div id="lobby-input-container" class="hidden text-left">
+                    <label for="player-name" class="block text-xs sm:text-sm font-semibold text-purple-200 mb-1.5 ml-1">Nama Pemain / Tim:</label>
+                    <input type="text" id="player-name" placeholder="Masukkan namamu di sini..." maxlength="20"
+                        class="w-full px-4 py-3.5 sm:px-5 sm:py-4 rounded-2xl bg-white text-slate-900 font-bold text-base sm:text-lg placeholder-slate-400 focus:outline-none focus:ring-4 focus:ring-amber-400 transition shadow-inner">
+                    <p id="name-error" class="text-rose-300 text-xs mt-1.5 hidden ml-1"><i class="fa-solid fa-circle-exclamation mr-1"></i>Silakan masukkan nama terlebih dahulu!</p>
+                </div>
+
+                <!-- Notifikasi Jika Perangkat Sudah Pernah Mengerjakan Kuis -->
+                <div id="already-played-banner" class="hidden bg-amber-500/20 border-2 border-amber-400/50 rounded-2xl p-4 sm:p-5 text-center">
+                    <div class="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-amber-400/20 text-amber-300 flex items-center justify-center text-xl sm:text-2xl mx-auto mb-2">
+                        <i class="fa-solid fa-lock"></i>
+                    </div>
+                    <h3 class="font-extrabold text-base sm:text-lg text-amber-300">Kuis Terkunci (Sudah Dikerjakan)</h3>
+                    <p id="already-played-info" class="text-xs sm:text-sm text-purple-100 mt-1 leading-relaxed">
+                        Perangkat/akun ini sudah menyelesaikan kuis 1 kali dan terekam di Leaderboard.
+                    </p>
+                </div>
+
+                <div class="flex flex-col sm:flex-row gap-2.5 sm:gap-3 pt-1 sm:pt-2">
+                    <button id="btn-start-quiz" disabled onclick="handleLobbyStartClick()" class="w-full sm:flex-1 bg-white/10 text-purple-300/60 font-bold text-sm sm:text-base py-3.5 sm:py-4 px-5 sm:px-6 rounded-2xl border border-white/10 cursor-not-allowed flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-hourglass-start"></i> Menunggu Admin...
+                    </button>
+                    <button id="btn-lobby-leaderboard" onclick="showLeaderboardOnly()" class="hidden w-full sm:w-auto bg-white/15 hover:bg-white/25 text-white font-semibold text-sm sm:text-base py-3.5 sm:py-4 px-5 sm:px-6 rounded-2xl border border-white/20 transition flex items-center justify-center gap-2 cursor-pointer">
+                        <i class="fa-solid fa-trophy text-amber-400"></i> Lihat Leaderboard
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- 1B. RUANG TUNGGU LIVE (WAITING LOBBY)      -->
+        <!-- ========================================== -->
+        <div id="screen-waiting-room" class="hidden quiz-card rounded-2xl sm:rounded-3xl p-5 sm:p-10 shadow-2xl text-center">
+            <div class="inline-flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-indigo-500/30 border border-indigo-400/40 text-amber-300 text-2xl sm:text-3xl mb-3 sm:mb-4 animate-pulse">
+                <i class="fa-solid fa-users-line"></i>
+            </div>
+            <h2 class="text-xl sm:text-3xl font-extrabold mb-2">Menunggu Admin Memulai Kuis...</h2>
+            <p class="text-purple-200 text-xs sm:text-sm max-w-md mx-auto mb-5 sm:mb-6 leading-relaxed">
+                Kamu sudah masuk ke ruang tunggu sebagai <strong id="waiting-my-name" class="text-amber-300">Pemain</strong>. Kuis akan otomatis dimulai serentak begitu Admin menekan tombol Mulai!
+            </p>
+
+            <div class="bg-slate-950/50 border border-white/15 rounded-2xl p-4 sm:p-5 max-w-lg mx-auto mb-5 sm:mb-6">
+                <div class="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-purple-200 mb-3">
+                    <span>Peserta di Ruang Tunggu</span>
+                    <span id="waiting-players-count" class="bg-emerald-500/20 text-emerald-300 px-2.5 py-0.5 rounded-full">1 Bergabung</span>
+                </div>
+                <div id="waiting-players-list" class="flex flex-wrap justify-center gap-2 max-h-48 overflow-y-auto">
+                    <!-- Daftar chip pemain yang sudah join -->
+                </div>
+            </div>
+
+            <button onclick="leaveWaitingRoom()" class="text-xs sm:text-sm text-purple-300 hover:text-white underline py-2 px-4 cursor-pointer">
+                Ganti Nama / Keluar Ruang Tunggu
+            </button>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- 2. LAYAR PERMAINAN KUIS                    -->
+        <!-- ========================================== -->
+        <div id="screen-quiz" class="hidden space-y-3 sm:space-y-4 min-w-0">
+            <!-- Header Bar: Progress, Kategori, Skor -->
+            <div class="quiz-card rounded-2xl p-3 sm:p-4 flex items-center justify-between gap-2 min-w-0">
+                <div class="flex items-center gap-1.5 sm:gap-2.5 min-w-0">
+                    <span id="question-counter" class="bg-white/20 px-2.5 sm:px-3.5 py-1.5 rounded-xl font-bold text-xs sm:text-sm shrink-0">
+                        1 / 30
+                    </span>
+                    <span id="category-badge" class="bg-indigo-500/40 border border-indigo-400/30 px-2.5 sm:px-3 py-1.5 rounded-xl text-[11px] sm:text-xs font-semibold text-indigo-200 truncate">
+                        Kategori
+                    </span>
+                </div>
+                <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                    <span id="active-status-pills" class="hidden sm:flex flex-wrap items-center gap-1.5"></span>
+                    <div class="flex items-center gap-1.5 sm:gap-2 bg-slate-900/60 px-3 sm:px-4 py-1.5 rounded-xl border border-white/10">
+                        <i class="fa-solid fa-star text-amber-400 text-xs sm:text-base"></i>
+                        <span id="current-score" class="font-extrabold text-base sm:text-lg">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Timer Bar -->
+            <div class="w-full bg-slate-900/70 h-2.5 sm:h-3 rounded-full overflow-hidden p-0.5 border border-white/10">
+                <div id="timer-bar" class="bg-gradient-to-r from-emerald-400 via-amber-400 to-rose-500 h-full rounded-full transition-all duration-1000 ease-linear" style="width: 100%;"></div>
+            </div>
+
+            <!-- Panel Inventory Buff & Debuff (Maksimal 2 Slot) -->
+            <div id="powerup-inventory-bar" class="quiz-card rounded-2xl p-3 sm:p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3">
+                <div class="flex items-center justify-between sm:justify-start gap-2 text-xs">
+                    <span class="bg-amber-400/20 text-amber-300 border border-amber-400/30 px-2.5 py-1 rounded-lg font-extrabold shrink-0">
+                        <i class="fa-solid fa-fire mr-1"></i>Streak: <span id="hud-streak-count">0</span>/<span id="hud-streak-target">8</span>
+                    </span>
+                    <span id="hud-milestone-hint" class="text-[11px] sm:text-xs text-purple-200 truncate">
+                        • Item tiap 8 benar • Debuff di soal #10, #15, #20, #30
+                    </span>
+                </div>
+                <div id="inventory-slots" class="grid grid-cols-2 gap-2 w-full sm:w-80">
+                    <!-- 2 Slot Inventory diisi via JavaScript -->
+                </div>
+            </div>
+
+            <!-- Kartu Pertanyaan & Opsi Jawaban -->
+            <div class="relative quiz-card rounded-2xl sm:rounded-3xl p-4 sm:p-8 shadow-2xl overflow-hidden min-w-0">
+                <!-- Overlay Beku (Freeze Debuff dari Lawan) -->
+                <div id="freeze-overlay" class="hidden absolute inset-0 z-30 bg-cyan-950/90 backdrop-blur-md flex flex-col items-center justify-center text-center p-5 sm:p-6 border-2 border-cyan-300/60 rounded-2xl sm:rounded-3xl">
+                    <div class="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-cyan-400/20 text-cyan-300 flex items-center justify-center text-3xl sm:text-4xl mb-3 animate-bounce border border-cyan-300/40">
+                        <i class="fa-solid fa-snowflake"></i>
+                    </div>
+                    <h3 class="text-xl sm:text-2xl font-extrabold text-cyan-200 mb-1">Layarmu Dibekukan!</h3>
+                    <p id="freeze-attacker-text" class="text-xs sm:text-sm text-cyan-100/90 max-w-sm mb-3">
+                        Pemain lain mengirim serangan es! Timer dijeda sementara hingga es mencair.
+                    </p>
+                    <div class="bg-cyan-400 text-slate-950 font-extrabold px-4 py-1.5 rounded-xl text-xs sm:text-sm">
+                        Mencair dalam <span id="freeze-countdown">4</span> detik...
+                    </div>
+                </div>
+
+                <!-- Tipe Soal Tag -->
+                <div class="flex items-center justify-between gap-2 mb-3 sm:mb-4">
+                    <span id="question-type-label" class="text-[11px] sm:text-xs uppercase tracking-wider font-bold text-amber-300 bg-amber-500/20 px-2.5 sm:px-3 py-1 rounded-lg truncate">
+                        Multiple Choice
+                    </span>
+                    <span class="text-xs text-purple-200 font-semibold shrink-0">
+                        <i class="fa-regular fa-clock mr-1"></i><span id="timer-text">30</span>d
+                    </span>
+                </div>
+
+                <!-- Teks Pertanyaan -->
+                <h2 id="question-text" class="text-lg sm:text-2xl font-bold leading-snug mb-5 sm:mb-8 break-words">
+                    Memuat pertanyaan...
+                </h2>
+
+                <!-- Area Opsi Jawaban (Dinamis sesuai tipe soal) -->
+                <div id="options-container" class="space-y-2.5 sm:space-y-3">
+                    <!-- Diisi via JavaScript -->
+                </div>
+
+                <!-- Tombol Submit Khusus Multiple Select & Fill in the Blank -->
+                <div id="submit-action-container" class="mt-5 sm:mt-6 hidden">
+                    <button id="btn-submit-answer" onclick="submitComplexAnswer()" class="w-full bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-500 hover:to-orange-600 text-slate-950 font-extrabold py-3.5 sm:py-4 rounded-2xl shadow-lg transition cursor-pointer">
+                        Kirim Jawaban
+                    </button>
+                </div>
+
+                <!-- Feedback & Penjelasan Langsung Setelah Menjawab -->
+                <div id="feedback-box" class="hidden mt-5 sm:mt-6 p-4 sm:p-5 rounded-2xl border transition-all">
+                    <div class="flex items-center gap-2.5 sm:gap-3 mb-2">
+                        <div id="feedback-icon" class="w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center font-bold text-base sm:text-lg shrink-0"></div>
+                        <h3 id="feedback-title" class="font-extrabold text-sm sm:text-lg leading-tight"></h3>
+                        <span id="feedback-points" class="ml-auto font-bold text-xs sm:text-sm px-2 sm:px-2.5 py-1 rounded-lg bg-black/20 shrink-0"></span>
+                    </div>
+                    <p id="feedback-explanation" class="text-xs sm:text-sm leading-relaxed opacity-95"></p>
+                    <button onclick="nextQuestion()" class="mt-4 w-full bg-white text-slate-900 hover:bg-purple-100 font-extrabold text-sm sm:text-base py-3 sm:py-3.5 rounded-xl shadow transition flex items-center justify-center gap-2 cursor-pointer">
+                        Lanjut Soal Berikutnya <i class="fa-solid fa-arrow-right"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- 3. LAYAR HASIL, LEADERBOARD & KUNCI JAWABAN-->
+        <!-- ========================================== -->
+        <div id="screen-leaderboard" class="hidden quiz-card rounded-2xl sm:rounded-3xl p-5 sm:p-10 shadow-2xl min-w-0">
+            <div class="text-center mb-6 sm:mb-8">
+                <div class="inline-flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-amber-400 text-slate-950 text-2xl sm:text-3xl shadow-lg mb-3 sm:mb-4">
+                    <i class="fa-solid fa-trophy"></i>
+                </div>
+                <h2 class="text-xl sm:text-3xl font-extrabold">Papan Peringkat (Leaderboard)</h2>
+                <p id="leaderboard-subtitle" class="text-purple-200 text-xs sm:text-sm mt-1">Klasemen skor tertinggi seluruh peserta secara real-time</p>
+            </div>
+
+            <!-- Ringkasan Skor Pemain Saat Ini (Muncul jika baru selesai main) -->
+            <div id="player-result-card" class="hidden bg-gradient-to-r from-indigo-600/60 to-purple-600/60 border border-indigo-400/40 rounded-2xl p-4 sm:p-5 mb-5 sm:mb-6 flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4 text-center sm:text-left">
+                <div class="min-w-0 max-w-full">
+                    <div class="text-[11px] sm:text-xs uppercase tracking-wider text-indigo-200 font-bold">Hasil Permainanmu</div>
+                    <div id="result-player-name" class="text-lg sm:text-xl font-extrabold text-white truncate">Pemain</div>
+                </div>
+                <div class="flex items-center justify-center gap-5 sm:gap-6 text-center">
+                    <div>
+                        <div class="text-[11px] sm:text-xs text-purple-200">Benar</div>
+                        <div id="result-correct-count" class="text-lg sm:text-xl font-extrabold text-emerald-400">0/30</div>
+                    </div>
+                    <div class="h-8 w-px bg-white/20"></div>
+                    <div>
+                        <div class="text-[11px] sm:text-xs text-purple-200">Total Skor</div>
+                        <div id="result-total-score" class="text-xl sm:text-2xl font-extrabold text-amber-400">0</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tabel Klasemen Leaderboard -->
+            <div class="bg-slate-950/50 rounded-2xl border border-white/10 overflow-hidden mb-6 sm:mb-8">
+                <div class="flex items-center justify-between gap-2 bg-white/5 px-3 sm:px-4 py-2.5 border-b border-white/10">
+                    <span class="text-[11px] sm:text-xs text-purple-200 font-semibold"><i class="fa-solid fa-signal text-emerald-400 mr-1.5"></i>Live Klasemen</span>
+                    <button onclick="manualRefreshLeaderboard(this)" class="text-[11px] sm:text-xs bg-white/10 hover:bg-white/20 text-amber-300 font-bold px-2.5 sm:px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 cursor-pointer shrink-0">
+                        <i class="fa-solid fa-arrows-rotate"></i> <span>Refresh</span>
+                    </button>
+                </div>
+                <div class="grid grid-cols-12 bg-white/10 px-3 sm:px-4 py-2.5 sm:py-3 text-[10px] sm:text-xs font-bold uppercase tracking-wider text-purple-200">
+                    <div class="col-span-2 text-center">Rank</div>
+                    <div class="col-span-5">Nama Pemain</div>
+                    <div class="col-span-2 text-center">Benar</div>
+                    <div class="col-span-3 text-right">Skor</div>
+                </div>
+                <div id="leaderboard-list" class="divide-y divide-white/10 max-h-80 overflow-y-auto">
+                    <!-- Diisi via JavaScript -->
+                </div>
+            </div>
+
+            <!-- Rekap Kunci Jawaban & Pembahasan (Muncul di Akhir Sesi Kuis) -->
+            <div id="answer-review-section" class="hidden mb-6 sm:mb-8">
+                <div class="flex items-center gap-2 mb-3 sm:mb-4">
+                    <i class="fa-solid fa-clipboard-check text-emerald-400 text-lg sm:text-xl"></i>
+                    <h3 class="text-lg sm:text-xl font-extrabold">Kunci Jawaban & Pembahasan</h3>
+                </div>
+                <div id="answer-review-list" class="space-y-2.5 sm:space-y-3 max-h-96 overflow-y-auto pr-1">
+                    <!-- Diisi via JavaScript -->
+                </div>
+            </div>
+
+            <!-- Tombol Aksi Bawah -->
+            <div class="flex flex-col sm:flex-row justify-center gap-3">
+                <button onclick="backToLockedLobby()" class="w-full sm:w-auto bg-white/15 hover:bg-white/25 text-white font-bold text-sm sm:text-base py-3.5 px-8 rounded-2xl border border-white/20 transition flex items-center justify-center gap-2 cursor-pointer">
+                    <i class="fa-solid fa-house"></i> Kembali ke Beranda
+                </button>
+            </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- 4. MODAL LOGIN & DASHBOARD ADMIN           -->
+        <!-- ========================================== -->
+        <div class="fixed bottom-3 right-3 sm:bottom-4 sm:right-4 flex items-center gap-1.5 sm:gap-2 z-40 max-w-[calc(100vw-1.5rem)]">
+            <div id="cloud-status-badge" class="bg-slate-900/90 text-purple-200/90 text-[10px] sm:text-[11px] px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl border border-white/15 backdrop-blur-md flex items-center gap-1.5 min-w-0 shadow-lg">
+                <span id="cloud-status-dot" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0"></span>
+                <span id="cloud-status-text" class="truncate">Menghubungkan Cloud...</span>
+            </div>
+            <button onclick="openAdminModal()" title="Panel Admin" class="bg-slate-900/90 hover:bg-slate-800 text-purple-100 hover:text-white text-[11px] sm:text-xs px-3 py-1.5 sm:py-2 rounded-xl border border-white/15 backdrop-blur-md transition flex items-center gap-1.5 cursor-pointer shrink-0 shadow-lg">
+                <i class="fa-solid fa-shield-halved text-indigo-300"></i> <span>Admin</span>
+            </button>
+        </div>
+
+        <!-- Modal Login Admin -->
+        <div id="modal-admin-login" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div class="quiz-card bg-slate-900/95 rounded-3xl p-6 sm:p-8 max-w-sm w-full border border-white/20 shadow-2xl text-center">
+                <div class="w-14 h-14 rounded-2xl bg-indigo-500/20 text-indigo-300 flex items-center justify-center text-2xl mx-auto mb-4 border border-indigo-400/30">
+                    <i class="fa-solid fa-user-shield"></i>
+                </div>
+                <h3 class="text-xl font-extrabold mb-1">Akses Dashboard Admin</h3>
+                <p class="text-xs text-purple-200 mb-5">Masukkan PIN Admin untuk mengontrol sesi Live, kelola soal & statistik peserta.</p>
+                <input type="password" id="admin-pin-input" placeholder="Masukkan PIN Admin" maxlength="10"
+                    class="w-full px-4 py-3 rounded-xl bg-white text-slate-900 font-bold text-center text-lg tracking-widest mb-2 focus:outline-none focus:ring-4 focus:ring-indigo-400">
+                <p id="admin-pin-error" class="text-rose-400 text-xs mb-3 hidden">PIN salah! Silakan coba lagi.</p>
+                <div class="flex gap-2 mt-4">
+                    <button onclick="closeAdminModal()" class="flex-1 bg-white/10 hover:bg-white/20 text-white font-semibold py-3 rounded-xl transition cursor-pointer">Batal</button>
+                    <button onclick="verifyAdminPin()" class="flex-1 bg-indigo-500 hover:bg-indigo-600 text-white font-extrabold py-3 rounded-xl shadow transition cursor-pointer">Masuk</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Layar Dashboard Statistik Admin -->
+        <div id="screen-admin" class="hidden quiz-card rounded-2xl sm:rounded-3xl p-4 sm:p-10 shadow-2xl min-w-0">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 border-b border-white/15 pb-5 sm:pb-6 mb-5 sm:mb-6">
+                <div>
+                    <div class="inline-flex items-center gap-2 text-[11px] sm:text-xs font-bold uppercase tracking-wider text-indigo-300 bg-indigo-500/20 px-2.5 sm:px-3 py-1 rounded-lg mb-2">
+                        <i class="fa-solid fa-chart-pie"></i> Panel Penyelenggara
+                    </div>
+                    <h2 class="text-xl sm:text-3xl font-extrabold">Kontrol Sesi & Statistik Kuis</h2>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="exportAdminCSV()" class="flex-1 sm:flex-initial justify-center bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-extrabold text-xs sm:text-sm py-2.5 px-3.5 sm:px-4 rounded-xl shadow transition flex items-center gap-1.5 cursor-pointer">
+                        <i class="fa-solid fa-file-csv"></i> Unduh CSV
+                    </button>
+                    <button onclick="closeAdminDashboard()" class="flex-1 sm:flex-initial justify-center bg-white/15 hover:bg-white/25 text-white font-bold text-xs sm:text-sm py-2.5 px-3.5 sm:px-4 rounded-xl border border-white/20 transition flex items-center gap-1.5 cursor-pointer">
+                        <i class="fa-solid fa-xmark"></i> Tutup
+                    </button>
+                </div>
+            </div>
+
+            <!-- KONTROL MODE SESI: BEBAS VS LIVE BARENG (SERENTAK) -->
+            <div class="mb-6 sm:mb-8 bg-gradient-to-r from-indigo-950/80 to-purple-950/80 border border-indigo-400/30 rounded-2xl p-4 sm:p-5">
+                <div class="flex flex-col gap-3 sm:gap-4">
+                    <div>
+                        <h3 class="text-base sm:text-lg font-extrabold text-white flex items-center gap-2">
+                            <i class="fa-solid fa-satellite-dish text-amber-400 shrink-0"></i> <span>Kontrol Mode Kuis (Bebas / Live Bareng)</span>
+                        </h3>
+                        <p id="admin-session-desc" class="text-xs text-purple-200 mt-1 leading-relaxed">
+                            Secara bawaan peserta menunggu pilihan Admin. Jika salah satu mode sudah berjalan (minimal 1 peserta aktif/selesai), mode lainnya otomatis terkunci agar konsisten.
+                        </p>
+                    </div>
+                    <div class="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2">
+                        <button id="btn-mode-free" onclick="setSessionMode('free')" class="justify-center px-3 py-2.5 sm:py-2 rounded-xl text-xs font-extrabold border transition cursor-pointer bg-white/10 text-purple-200 border-white/15 hover:bg-white/20 flex items-center">
+                            <i class="fa-solid fa-door-open mr-1.5"></i> Mode Bebas
+                        </button>
+                        <button id="btn-mode-live-wait" onclick="setSessionMode('live_waiting')" class="justify-center px-3 py-2.5 sm:py-2 rounded-xl text-xs font-extrabold border transition cursor-pointer bg-white/10 text-purple-200 border-white/15 hover:bg-white/20 flex items-center">
+                            <i class="fa-solid fa-hourglass-half mr-1.5"></i> Lobby Live
+                        </button>
+                        <button id="btn-mode-live-start" onclick="setSessionMode('live_started')" class="col-span-2 sm:col-span-1 justify-center bg-emerald-400 hover:bg-emerald-500 text-slate-950 font-extrabold text-xs sm:text-sm py-2.5 sm:py-2 px-4 rounded-xl shadow transition flex items-center gap-1.5 cursor-pointer">
+                            <i class="fa-solid fa-play"></i> Mulai Live Sekarang!
+                        </button>
+                        <button onclick="resetSessionModeSelection()" title="Reset status mode ke Menunggu Admin" class="justify-center bg-rose-500/20 hover:bg-rose-500/35 text-rose-200 border border-rose-400/40 font-extrabold text-xs py-2.5 sm:py-2 px-3 rounded-xl transition flex items-center gap-1.5 cursor-pointer">
+                            <i class="fa-solid fa-unlock-keyhole"></i> Reset Mode
+                        </button>
+                        <button onclick="resetToDefault30Questions()" class="justify-center bg-amber-400/20 hover:bg-amber-400/30 text-amber-300 border border-amber-400/40 font-extrabold text-xs sm:text-sm py-2.5 sm:py-2 px-3.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer">
+                            <i class="fa-solid fa-rotate"></i> 30 Soal Baru
+                        </button>
+                    </div>
+                </div>
+                <div id="admin-lock-status-banner" class="mt-3 text-xs font-semibold text-amber-300 bg-black/25 px-3.5 py-2.5 rounded-xl border border-white/10 leading-relaxed">
+                    Status saat ini: Menunggu Admin memilih mode pelaksanaan.
+                </div>
+                <div id="admin-waiting-lobby-preview" class="mt-3 pt-3 border-t border-white/10 flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <span class="text-purple-200">Peserta di Ruang Tunggu Live: <strong id="admin-waiting-count" class="text-amber-300">0 orang</strong></span>
+                    <div id="admin-waiting-names" class="flex flex-wrap gap-1.5"></div>
+                </div>
+            </div>
+
+            <!-- Kartu Metrik Ringkasan -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-8">
+                <div class="bg-slate-950/50 border border-white/10 rounded-2xl p-4">
+                    <div class="text-xs text-purple-200 mb-1">Total Peserta</div>
+                    <div id="stat-total-players" class="text-2xl sm:text-3xl font-extrabold text-white">0</div>
+                </div>
+                <div class="bg-slate-950/50 border border-white/10 rounded-2xl p-4">
+                    <div class="text-xs text-purple-200 mb-1">Rata-rata Skor</div>
+                    <div id="stat-avg-score" class="text-2xl sm:text-3xl font-extrabold text-amber-400">0</div>
+                </div>
+                <div class="bg-slate-950/50 border border-white/10 rounded-2xl p-4">
+                    <div class="text-xs text-purple-200 mb-1">Skor Tertinggi</div>
+                    <div id="stat-max-score" class="text-2xl sm:text-3xl font-extrabold text-emerald-400">0</div>
+                </div>
+                <div class="bg-slate-950/50 border border-white/10 rounded-2xl p-4">
+                    <div class="text-xs text-purple-200 mb-1">Rata-rata Benar</div>
+                    <div id="stat-avg-correct" class="text-2xl sm:text-3xl font-extrabold text-sky-400">0%</div>
+                </div>
+            </div>
+
+            <!-- Analisis Tingkat Ketepatan Per Soal -->
+            <div class="mb-8">
+                <h3 class="text-lg font-extrabold mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-list-check text-amber-400"></i> Statistik Ketepatan Per Soal
+                </h3>
+                <div id="admin-question-stats" class="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-72 overflow-y-auto pr-1">
+                    <!-- Diisi via JavaScript -->
+                </div>
+            </div>
+
+            <!-- MANAJEMEN BANK SOAL (CRUD ADMIN) -->
+            <div class="mb-8 bg-slate-950/40 border border-white/15 rounded-2xl p-5">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                    <div>
+                        <h3 class="text-lg font-extrabold flex items-center gap-2">
+                            <i class="fa-solid fa-pen-to-square text-sky-400"></i> Kelola Soal Kuis (CRUD)
+                        </h3>
+                        <p class="text-xs text-purple-200">Tambah, ubah, atau hapus soal secara langsung (target streak & milestone debuff otomatis menyesuaikan jumlah soal).</p>
+                    </div>
+                    <button onclick="openQuestionEditorModal()" class="bg-sky-500 hover:bg-sky-600 text-slate-950 font-extrabold text-xs sm:text-sm py-2.5 px-4 rounded-xl shadow transition flex items-center gap-2 shrink-0 cursor-pointer">
+                        <i class="fa-solid fa-plus"></i> Tambah Soal Baru
+                    </button>
+                </div>
+                <div id="admin-crud-questions-list" class="space-y-2.5 max-h-80 overflow-y-auto pr-1">
+                    <!-- Daftar soal CRUD diisi via JavaScript -->
+                </div>
+            </div>
+
+            <!-- Tabel Lengkap Seluruh Peserta & Detail Jawaban -->
+            <div>
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                    <h3 class="text-lg font-extrabold flex items-center gap-2">
+                        <i class="fa-solid fa-users text-emerald-400"></i> Data Lengkap Leaderboard & Kontrol Peserta
+                    </h3>
+                    <button onclick="confirmResetLeaderboard()" class="text-xs bg-rose-500/20 hover:bg-rose-500/40 text-rose-300 border border-rose-400/30 font-bold px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 w-fit cursor-pointer">
+                        <i class="fa-solid fa-trash-can"></i> Reset Semua Skor Peserta
+                    </button>
+                </div>
+                <div class="bg-slate-950/50 rounded-2xl border border-white/10 overflow-x-auto">
+                    <table class="w-full text-left text-xs sm:text-sm">
+                        <thead class="bg-white/10 text-purple-200 uppercase text-xs">
+                            <tr>
+                                <th class="py-3 px-4">Rank</th>
+                                <th class="py-3 px-4">Nama Peserta</th>
+                                <th class="py-3 px-4 text-center">Benar</th>
+                                <th class="py-3 px-4 text-right">Skor</th>
+                                <th class="py-3 px-4">Waktu Selesai</th>
+                                <th class="py-3 px-4 text-center">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-participants-table" class="divide-y divide-white/10">
+                            <!-- Diisi via JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+            <!-- Modal Detail Analisis Per Player (Admin) -->
+        <div id="modal-player-detail" class="hidden fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+            <div class="quiz-card bg-slate-900 rounded-2xl sm:rounded-3xl p-5 sm:p-8 max-w-2xl w-full border border-white/20 shadow-2xl my-auto max-h-[90vh] overflow-y-auto">
+                <div class="flex items-start justify-between gap-3 border-b border-white/15 pb-4 mb-4 sm:mb-5">
+                    <div class="min-w-0">
+                        <span class="text-[10px] sm:text-[11px] uppercase tracking-wider font-bold text-indigo-300 bg-indigo-500/20 px-2.5 py-1 rounded-lg">Analisis Detail Peserta</span>
+                        <h3 id="detail-player-name" class="text-lg sm:text-2xl font-extrabold text-white mt-1.5 truncate">Nama Peserta</h3>
+                        <p id="detail-player-meta" class="text-[11px] sm:text-xs text-purple-200 mt-0.5 break-all">ID Perangkat & Waktu Selesai</p>
+                    </div>
+                    <button onclick="closePlayerDetailModal()" class="bg-white/10 hover:bg-white/20 w-9 h-9 rounded-xl flex items-center justify-center text-white cursor-pointer shrink-0">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+
+                <!-- Ringkasan Kecepatan & Akurasi Player -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+                    <div class="bg-slate-950/60 border border-white/10 rounded-2xl p-3">
+                        <div class="text-[11px] text-purple-200">Total Skor</div>
+                        <div id="detail-stat-score" class="text-lg sm:text-xl font-extrabold text-amber-400">0</div>
+                    </div>
+                    <div class="bg-slate-950/60 border border-white/10 rounded-2xl p-3">
+                        <div class="text-[11px] text-purple-200">Akurasi</div>
+                        <div id="detail-stat-accuracy" class="text-lg sm:text-xl font-extrabold text-emerald-400">0/10</div>
+                    </div>
+                    <div class="bg-slate-950/60 border border-white/10 rounded-2xl p-3">
+                        <div class="text-[11px] text-purple-200">Jawaban Tercepat</div>
+                        <div id="detail-stat-fastest" class="text-sm sm:text-base font-extrabold text-sky-400">-</div>
+                    </div>
+                    <div class="bg-slate-950/60 border border-white/10 rounded-2xl p-3">
+                        <div class="text-[11px] text-purple-200">Total Waktu</div>
+                        <div id="detail-stat-totaltime" class="text-lg sm:text-xl font-extrabold text-purple-200">0d</div>
+                    </div>
+                </div>
+
+                <!-- Highlight Soal Salah -->
+                <div id="detail-wrong-summary" class="mb-4 p-3.5 rounded-2xl bg-rose-500/15 border border-rose-400/30 text-xs text-rose-200">
+                    <!-- Diisi via JavaScript -->
+                </div>
+
+                <!-- Rincian Per Nomor Soal -->
+                <h4 class="text-sm font-extrabold text-white mb-2.5 flex items-center gap-2">
+                    <i class="fa-solid fa-stopwatch text-amber-400"></i> Rincian Jawaban & Durasi Tiap Soal
+                </h4>
+                <div id="detail-questions-breakdown" class="space-y-2.5 max-h-80 overflow-y-auto pr-1">
+                    <!-- Diisi via JavaScript -->
+                </div>
+
+                <div class="mt-5 flex justify-end">
+                    <button onclick="closePlayerDetailModal()" class="bg-white/15 hover:bg-white/25 text-white font-bold text-sm py-2.5 px-6 rounded-xl border border-white/20 cursor-pointer">
+                        Tutup Detail
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Form Tambah / Edit Soal (CRUD) -->
+        <div id="modal-crud-question" class="hidden fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+            <div class="quiz-card bg-slate-900 rounded-2xl sm:rounded-3xl p-5 sm:p-8 max-w-xl w-full border border-white/20 shadow-2xl my-auto max-h-[90vh] overflow-y-auto">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 id="crud-modal-title" class="text-xl font-extrabold text-white">Tambah Soal Baru</h3>
+                    <button onclick="closeQuestionEditorModal()" class="text-purple-200 hover:text-white text-lg cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <input type="hidden" id="crud-edit-index" value="-1">
+                <div class="space-y-3.5 text-sm">
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                            <label class="block text-xs font-bold text-purple-200 mb-1">Kategori</label>
+                            <select id="crud-category" class="w-full px-3 py-2.5 rounded-xl bg-slate-800 text-white border border-white/15 font-semibold">
+                                <option value="Manusia & Hewan">Manusia & Hewan</option>
+                                <option value="Logika & Hitungan">Logika & Hitungan</option>
+                                <option value="Wawasan Nusantara">Wawasan Nusantara</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-purple-200 mb-1">Tipe Soal</label>
+                            <select id="crud-type" onchange="toggleCrudTypeFields()" class="w-full px-3 py-2.5 rounded-xl bg-slate-800 text-white border border-white/15 font-semibold">
+                                <option value="MC">Multiple Choice</option>
+                                <option value="TF">True or False</option>
+                                <option value="MS">Multiple Select</option>
+                                <option value="TEXT">Fill in the Blank</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-purple-200 mb-1">Waktu (Detik)</label>
+                            <input type="number" id="crud-time" value="25" min="10" max="120" class="w-full px-3 py-2.5 rounded-xl bg-slate-800 text-white border border-white/15 font-bold">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-purple-200 mb-1">Teks Pertanyaan</label>
+                        <textarea id="crud-question" rows="2" placeholder="Tulis pertanyaan di sini..." class="w-full px-3.5 py-2.5 rounded-xl bg-white text-slate-900 font-semibold focus:outline-none"></textarea>
+                    </div>
+
+                    <!-- Area Opsi untuk MC & MS -->
+                    <div id="crud-options-group" class="space-y-2">
+                        <label class="block text-xs font-bold text-purple-200">Opsi Jawaban (A - D)</label>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            <div class="flex items-center gap-2 bg-slate-800/90 p-1.5 rounded-xl border border-white/15">
+                                <span class="w-7 h-7 rounded-lg bg-amber-400 text-slate-950 font-extrabold text-xs flex items-center justify-center shrink-0">A</span>
+                                <input type="text" id="crud-opt-0" placeholder="Masukkan Opsi A..." class="w-full px-2.5 py-1.5 rounded-lg bg-white text-slate-900 font-semibold text-xs focus:outline-none">
+                            </div>
+                            <div class="flex items-center gap-2 bg-slate-800/90 p-1.5 rounded-xl border border-white/15">
+                                <span class="w-7 h-7 rounded-lg bg-amber-400 text-slate-950 font-extrabold text-xs flex items-center justify-center shrink-0">B</span>
+                                <input type="text" id="crud-opt-1" placeholder="Masukkan Opsi B..." class="w-full px-2.5 py-1.5 rounded-lg bg-white text-slate-900 font-semibold text-xs focus:outline-none">
+                            </div>
+                            <div class="flex items-center gap-2 bg-slate-800/90 p-1.5 rounded-xl border border-white/15">
+                                <span class="w-7 h-7 rounded-lg bg-amber-400 text-slate-950 font-extrabold text-xs flex items-center justify-center shrink-0">C</span>
+                                <input type="text" id="crud-opt-2" placeholder="Masukkan Opsi C..." class="w-full px-2.5 py-1.5 rounded-lg bg-white text-slate-900 font-semibold text-xs focus:outline-none">
+                            </div>
+                            <div class="flex items-center gap-2 bg-slate-800/90 p-1.5 rounded-xl border border-white/15">
+                                <span class="w-7 h-7 rounded-lg bg-amber-400 text-slate-950 font-extrabold text-xs flex items-center justify-center shrink-0">D</span>
+                                <input type="text" id="crud-opt-3" placeholder="Masukkan Opsi D..." class="w-full px-2.5 py-1.5 rounded-lg bg-white text-slate-900 font-semibold text-xs focus:outline-none">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Kunci Jawaban MC -->
+                    <div id="crud-answer-mc-group">
+                        <label class="block text-xs font-bold text-purple-200 mb-1">Kunci Jawaban Benar</label>
+                        <select id="crud-answer-mc" class="w-full px-3 py-2.5 rounded-xl bg-slate-800 text-white border border-white/15 font-bold">
+                            <option value="0">Opsi A</option>
+                            <option value="1">Opsi B</option>
+                            <option value="2">Opsi C</option>
+                            <option value="3">Opsi D</option>
+                        </select>
+                    </div>
+
+                    <!-- Kunci Jawaban TF -->
+                    <div id="crud-answer-tf-group" class="hidden">
+                        <label class="block text-xs font-bold text-purple-200 mb-1">Kunci Jawaban Benar</label>
+                        <select id="crud-answer-tf" class="w-full px-3 py-2.5 rounded-xl bg-slate-800 text-white border border-white/15 font-bold">
+                            <option value="0">Benar (True)</option>
+                            <option value="1">Salah (False)</option>
+                        </select>
+                    </div>
+
+                    <!-- Kunci Jawaban MS -->
+                    <div id="crud-answer-ms-group" class="hidden">
+                        <label class="block text-xs font-bold text-purple-200 mb-1">Centang Kunci Jawaban Benar (Pilih lebih dari 1)</label>
+                        <div class="flex flex-wrap gap-4 bg-slate-800/80 p-3 rounded-xl border border-white/10">
+                            <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" class="crud-ms-check" value="0"> Opsi A</label>
+                            <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" class="crud-ms-check" value="1"> Opsi B</label>
+                            <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" class="crud-ms-check" value="2"> Opsi C</label>
+                            <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" class="crud-ms-check" value="3"> Opsi D</label>
+                        </div>
+                    </div>
+
+                    <!-- Kunci Jawaban TEXT -->
+                    <div id="crud-answer-text-group" class="hidden">
+                        <label class="block text-xs font-bold text-purple-200 mb-1">Kata Kunci Jawaban Diterima (pisahkan dengan koma)</label>
+                        <input type="text" id="crud-answer-text" placeholder="Contoh: jakarta, dki jakarta" class="w-full px-3.5 py-2.5 rounded-xl bg-white text-slate-900 font-semibold text-xs">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-purple-200 mb-1">Penjelasan / Pembahasan</label>
+                        <textarea id="crud-explanation" rows="2" placeholder="Penjelasan singkat jawaban benar..." class="w-full px-3.5 py-2 rounded-xl bg-white text-slate-900 text-xs font-medium focus:outline-none"></textarea>
+                    </div>
+
+                    <p id="crud-form-error" class="text-rose-400 text-xs hidden"></p>
+
+                    <div class="flex gap-2 pt-2">
+                        <button onclick="closeQuestionEditorModal()" class="flex-1 bg-white/10 hover:bg-white/20 text-white font-bold py-3 rounded-xl transition cursor-pointer">Batal</button>
+                        <button onclick="saveCrudQuestion()" class="flex-1 bg-emerald-400 hover:bg-emerald-500 text-slate-950 font-extrabold py-3 rounded-xl shadow transition cursor-pointer">Simpan Soal</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Toast Notifikasi Non-Blocking -->
+        <div id="toast-notification" class="hidden fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-slate-900/95 text-white border border-amber-400/50 px-5 py-3 rounded-2xl shadow-2xl text-sm font-bold flex items-center gap-2.5">
+            <i class="fa-solid fa-circle-info text-amber-400"></i>
+            <span id="toast-message">Pesan notifikasi</span>
+        </div>
+
+        <!-- Modal Konfirmasi Hapus 1 Peserta (Admin) -->
+        <div id="modal-confirm-delete-one" class="hidden fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div class="quiz-card bg-slate-900 rounded-3xl p-6 max-w-sm w-full border border-rose-400/30 shadow-2xl text-center">
+                <div class="w-12 h-12 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center text-xl mx-auto mb-3">
+                    <i class="fa-solid fa-user-xmark"></i>
+                </div>
+                <h3 class="text-lg font-extrabold mb-1">Hapus / Reset Peserta Ini?</h3>
+                <p id="delete-one-desc" class="text-xs text-purple-200 mb-5">Skor peserta ini akan dihapus dari Leaderboard dan perangkatnya dapat mengulang kuis kembali.</p>
+                <div class="flex gap-2">
+                    <button onclick="document.getElementById('modal-confirm-delete-one').classList.add('hidden')" class="flex-1 bg-white/10 hover:bg-white/20 text-white font-bold py-2.5 rounded-xl cursor-pointer">Batal</button>
+                    <button onclick="executeDeleteSingleParticipant()" class="flex-1 bg-rose-500 hover:bg-rose-600 text-white font-extrabold py-2.5 rounded-xl cursor-pointer">Ya, Hapus</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Konfirmasi Reset Leaderboard Admin -->
+        <div id="modal-confirm-reset" class="hidden fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div class="quiz-card bg-slate-900 rounded-3xl p-6 max-w-sm w-full border border-rose-400/30 shadow-2xl text-center">
+                <div class="w-12 h-12 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center text-xl mx-auto mb-3">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                </div>
+                <h3 class="text-lg font-extrabold mb-1">Reset Semua Data Peserta?</h3>
+                <p class="text-xs text-purple-200 mb-5">Seluruh skor di Leaderboard akan dihapus sehingga peserta dapat bermain kembali dari awal.</p>
+                <div class="flex gap-2">
+                    <button onclick="document.getElementById('modal-confirm-reset').classList.add('hidden')" class="flex-1 bg-white/10 hover:bg-white/20 text-white font-bold py-2.5 rounded-xl cursor-pointer">Batal</button>
+                    <button onclick="executeResetLeaderboard()" class="flex-1 bg-rose-500 hover:bg-rose-600 text-white font-extrabold py-2.5 rounded-xl cursor-pointer">Ya, Hapus Semua</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ========================================== -->
+    <!-- LOGIKA UTAMA APLIKASI (NON-MODULE)          -->
+    <!-- ========================================== -->
+    <script>
+        const ADMIN_PIN = "6767";
+
+        // Default 30 Soal Baru Campuran Seimbang (10-10-10)
+        const DEFAULT_QUESTIONS = [
+            // ==========================================
+            // KATEGORI 1: MANUSIA & HEWAN (10 Soal)
+            // ==========================================
+            {
+                category: "Manusia & Hewan",
+                type: "MC",
+                time: 25,
+                question: "Hewan laut manakah yang memiliki tiga buah jantung dan darah berwarna biru karena mengandung tembaga (hemosianin)?",
+                options: ["Gurita", "Kuda Laut", "Ubur-ubur", "Bintang Laut"],
+                answer: 0,
+                explanation: "Gurita memiliki tiga jantung (dua memompa darah ke insang dan satu ke seluruh tubuh) serta darah berbasis tembaga yang tampak kebiruan."
+            },
+            {
+                category: "Manusia & Hewan",
+                type: "TF",
+                time: 20,
+                question: "Sidik jari setiap manusia di dunia bersifat unik, bahkan sepasang anak kembar identik pun memiliki pola sidik jari yang berbeda.",
+                options: ["Benar (True)", "Salah (False)"],
+                answer: 0,
+                explanation: "Meskipun kembar identik berbagi DNA yang sama, pola sidik jari terbentuk dari interaksi janin di dalam rahim sehingga tidak pernah sama persis."
+            },
+            {
+                category: "Manusia & Hewan",
+                type: "MS",
+                time: 30,
+                question: "Manakah dari hewan berikut yang merupakan mamalia bertelur (monotremata)? (Pilih 2 jawaban)",
+                options: ["Platipus", "Armadilo", "Ekidna", "Trenggiling"],
+                answer: [0, 2],
+                explanation: "Platipus dan ekidna (landak semut) dari Australia dan Papua adalah satu-satunya kelompok mamalia yang berkembang biak dengan bertelur."
+            },
+            {
+                category: "Manusia & Hewan",
+                type: "TEXT",
+                time: 25,
+                question: "Apa nama tulang terpanjang sekaligus terkuat di dalam tubuh manusia yang terletak di bagian paha?",
+                acceptedAnswers: ["tulang paha", "femur", "tulang femur"],
+                explanation: "Tulang paha (femur) adalah tulang terpanjang dan terkuat pada kerangka manusia yang menopang berat tubuh saat berdiri dan berjalan."
+            },
+            {
+                category: "Manusia & Hewan",
+                type: "MC",
+                time: 25,
+                question: "Burung kolibri dikenal sangat lincah di udara karena mampu melakukan kemampuan terbang unik yang tidak dimiliki burung lain, yaitu...",
+                options: ["Terbang menembus awan badai", "Terbang mundur", "Terbang sambil tidur nyenyak", "Terbang tanpa mengepakkan sayap sama sekali"],
+                answer: 1,
+                explanation: "Struktur sendi bahu kolibri memungkinkannya memutar sayap hingga 180 derajat sehingga bisa melayang diam dan terbang mundur."
+            },
+            {
+                category: "Manusia & Hewan",
+                type: "TF",
+                time: 20,
+                question: "Berang-berang laut sering berpegangan tangan saat tidur mengapung di permukaan air agar tidak saling hanyut terbawa arus.",
+                options: ["Benar (True)", "Salah (False)"],
+                answer: 0,
+                explanation: "Berang-berang laut saling menggenggam tangan atau melilitkan tubuhnya dengan rumput laut agar tetap bersama kelompoknya saat tertidur."
+            },
+            {
+                category: "Manusia & Hewan",
+                type: "MS",
+                time: 30,
+                question: "Manakah dari organ tubuh manusia berikut yang berperan langsung menyaring racun dan limbah dari darah? (Pilih 2 jawaban)",
+                options: ["Hati (Liver)", "Lambung", "Ginjal", "Pankreas"],
+                answer: [0, 2],
+                explanation: "Hati menetralisir zat beracun dalam darah, sementara ginjal menyaring limbah metabolisme untuk dibuang melalui urine."
+            },
+            {
+                category: "Manusia & Hewan",
+                type: "MC",
+                time: 25,
+                question: "Hewan amfibi asal Meksiko yang dijuluki 'ikan berjalan' dan mampu menumbuhkan kembali anggota tubuhnya yang putus adalah...",
+                options: ["Axolotl", "Salamander Api", "Katak Kaca", "Kadal Air"],
+                answer: 0,
+                explanation: "Axolotl memiliki kemampuan regenerasi luar biasa untuk menumbuhkan kembali kaki, ekor, bahkan sebagian jaringan jantung dan otaknya."
+            },
+            {
+                category: "Manusia & Hewan",
+                type: "TEXT",
+                time: 25,
+                question: "Pigmen alami pada kulit, rambut, dan iris mata manusia yang berfungsi melindungi kulit dari sinar ultraviolet matahari disebut...",
+                acceptedAnswers: ["melanin", "zat melanin"],
+                explanation: "Melanin adalah pigmen yang diproduksi sel melanosit untuk menentukan warna kulit serta menyerap radiasi sinar UV."
+            },
+            {
+                category: "Manusia & Hewan",
+                type: "MC",
+                time: 25,
+                question: "Hewan darat manakah yang memiliki indra penciuman luar biasa tajam hingga mampu mendeteksi sumber air dari jarak belasan kilometer?",
+                options: ["Gajah Afrika", "Kuda Nil", "Banteng", "Zebra"],
+                answer: 0,
+                explanation: "Gajah memiliki sekitar 2.000 gen reseptor penciuman—jauh lebih banyak daripada anjing—yang memungkinkannya mencium bau air dari kejauhan."
+            },
+
+            // ==========================================
+            // KATEGORI 2: LOGIKA & HITUNGAN (10 Soal)
+            // ==========================================
+            {
+                category: "Logika & Hitungan",
+                type: "MC",
+                time: 25,
+                question: "Sebuah lilin menyala di atas meja. Ada 7 lilin menyala di ruang tamu, lalu 2 lilin padam tertiup angin. Jika pintu ditutup rapat, berapa lilin yang tersisa keesokan paginya?",
+                options: ["5 lilin", "7 lilin", "2 lilin", "0 lilin"],
+                answer: 2,
+                explanation: "5 lilin yang tetap menyala akan habis meleleh terbakar semalaman, sehingga hanya tersisa 2 lilin yang tadi padam."
+            },
+            {
+                category: "Logika & Hitungan",
+                type: "TF",
+                time: 25,
+                question: "Jika dibutuhkan waktu 5 menit untuk merebus 1 butir telur hingga matang, maka untuk merebus 5 butir telur sekaligus di panci yang sama dibutuhkan waktu 25 menit.",
+                options: ["Benar (True)", "Salah (False)"],
+                answer: 1,
+                explanation: "Kelima telur direbus secara bersamaan dalam satu panci, sehingga waktunya tetap 5 menit."
+            },
+            {
+                category: "Logika & Hitungan",
+                type: "TEXT",
+                time: 25,
+                question: "Perhatikan deret angka berikut: 1, 1, 2, 3, 5, 8, ... Berapakah angka berikutnya dalam barisan Fibonacci ini?",
+                acceptedAnswers: ["13", "tiga belas"],
+                explanation: "Setiap angka pada deret Fibonacci merupakan hasil penjumlahan dua angka sebelumnya: 5 + 8 = 13."
+            },
+            {
+                category: "Logika & Hitungan",
+                type: "MC",
+                time: 30,
+                question: "Di dalam sebuah laci gelap terdapat 10 kaus kaki hitam dan 10 kaus kaki putih yang tercampur acak. Berapa jumlah minimal kaus kaki yang harus diambil agar pasti mendapatkan 1 pasang warna yang sama?",
+                options: ["2 buah", "3 buah", "11 buah", "12 buah"],
+                answer: 1,
+                explanation: "Dengan mengambil 3 buah kaus kaki, karena hanya ada 2 pilihan warna (hitam atau putih), minimal pasti ada 2 buah yang warnanya sama."
+            },
+            {
+                category: "Logika & Hitungan",
+                type: "MS",
+                time: 30,
+                question: "Manakah dari bilangan berikut yang merupakan bilangan prima (hanya habis dibagi 1 dan dirinya sendiri)? (Pilih 2 jawaban)",
+                options: ["27", "29", "31", "33"],
+                answer: [1, 2],
+                explanation: "29 dan 31 adalah bilangan prima, sedangkan 27 habis dibagi 3 dan 9, serta 33 habis dibagi 3 dan 11."
+            },
+            {
+                category: "Logika & Hitungan",
+                type: "TEXT",
+                time: 25,
+                question: "Aku selalu berada di depanmu setiap saat, tetapi kamu tidak akan pernah bisa melihat atau menyentuhku. Siapakah aku?",
+                acceptedAnswers: ["masa depan", "future"],
+                explanation: "Masa depan selalu berada di depan perjalanan waktu kita, namun tidak pernah terlihat wujudnya secara langsung."
+            },
+            {
+                category: "Logika & Hitungan",
+                type: "MC",
+                time: 30,
+                question: "Harga sebuah buku tulis dan sebuah pensil jika dibeli bersama adalah Rp11.000. Harga buku tulis Rp10.000 lebih mahal daripada pensil. Berapa harga pensilnya?",
+                options: ["Rp1.000", "Rp500", "Rp1.500", "Rp2.000"],
+                answer: 1,
+                explanation: "Jika pensil Rp500 dan buku tulis Rp10.500, selisihnya tepat Rp10.000 dan total harganya Rp11.000."
+            },
+            {
+                category: "Logika & Hitungan",
+                type: "TF",
+                time: 20,
+                question: "Di dalam kalender Masehi satu tahun penuh, terdapat tepat 7 bulan yang memiliki jumlah tanggal sampai 31 hari.",
+                options: ["Benar (True)", "Salah (False)"],
+                answer: 0,
+                explanation: "Ketujuh bulan yang memiliki 31 hari adalah Januari, Maret, Mei, Juli, Agustus, Oktober, dan Desember."
+            },
+            {
+                category: "Logika & Hitungan",
+                type: "MC",
+                time: 30,
+                question: "Berapakah hasil dari operasi hitung berikut: 24 ÷ 4 × (2 + 1)?",
+                options: ["2", "18", "9", "12"],
+                answer: 1,
+                explanation: "Hitung dalam kurung dulu (2 + 1 = 3), lalu kerjakan pembagian dan perkalian dari kiri ke kanan: 24 ÷ 4 = 6, kemudian 6 × 3 = 18."
+            },
+            {
+                category: "Logika & Hitungan",
+                type: "MS",
+                time: 30,
+                question: "Manakah dari pernyataan berikut yang menghasilkan nilai tepat sama dengan 25% dari 200? (Pilih 2 jawaban)",
+                options: ["Seperempat dari 200", "Angka 50", "Angka 25", "Setengah dari 80"],
+                answer: [0, 1],
+                explanation: "25% sama dengan 1/4, dan 1/4 × 200 = 50."
+            },
+
+            // ==========================================
+            // KATEGORI 3: WAWASAN NUSANTARA (10 Soal)
+            // ==========================================
+            {
+                category: "Wawasan Nusantara",
+                type: "MC",
+                time: 25,
+                question: "Taman Nasional Lorentz yang merupakan kawasan lindung terluas di Asia Tenggara dan memiliki gletser salju abadi terletak di pulau...",
+                options: ["Papua", "Kalimantan", "Sulawesi", "Sumatra"],
+                answer: 0,
+                explanation: "Taman Nasional Lorentz terletak di Papua dan membentang dari puncak gunung bersalju Puncak Jaya hingga perairan pesisir Laut Arafura."
+            },
+            {
+                category: "Wawasan Nusantara",
+                type: "TF",
+                time: 20,
+                question: "Komodo (Varanus komodoensis) hanya dapat ditemukan hidup secara alami di alam liar di Indonesia dan merupakan kadal terbesar di dunia.",
+                options: ["Benar (True)", "Salah (False)"],
+                answer: 0,
+                explanation: "Komodo adalah satwa endemik Indonesia yang hidup alami di Pulau Komodo, Rinca, Flores, Gili Motang, dan Padar."
+            },
+            {
+                category: "Wawasan Nusantara",
+                type: "MS",
+                time: 30,
+                question: "Manakah dari provinsi berikut yang terletak di Pulau Kalimantan? (Pilih 2 jawaban)",
+                options: ["Kalimantan Timur", "Gorontalo", "Kalimantan Barat", "Bengkulu"],
+                answer: [0, 2],
+                explanation: "Kalimantan Timur dan Kalimantan Barat berada di Pulau Kalimantan, sedangkan Gorontalo di Sulawesi dan Bengkulu di Sumatra."
+            },
+            {
+                category: "Wawasan Nusantara",
+                type: "TEXT",
+                time: 25,
+                question: "Alat musik petik tradisional khas Pulau Rote, Nusa Tenggara Timur, yang terbuat dari daun lontar berbentuk setengah lingkaran adalah...",
+                acceptedAnswers: ["sasando", "alat musik sasando"],
+                explanation: "Sasando adalah alat musik berdawai dari Pulau Rote (NTT) yang menggunakan wadah resonansi dari anyaman daun lontar."
+            },
+            {
+                category: "Wawasan Nusantara",
+                type: "MC",
+                time: 25,
+                question: "Selat sempit yang menghubungkan Pulau Jawa bagian timur dengan Pulau Bali bagian barat adalah...",
+                options: ["Selat Sunda", "Selat Bali", "Selat Lombok", "Selat Makassar"],
+                answer: 1,
+                explanation: "Selat Bali memisahkan ujung timur Jawa (Banyuwangi) dengan ujung barat Bali (Gilimanuk)."
+            },
+            {
+                category: "Wawasan Nusantara",
+                type: "TF",
+                time: 20,
+                question: "Candi Prambanan di perbatasan Yogyakarta dan Jawa Tengah merupakan kompleks candi Hindu terbesar di Indonesia yang didedikasikan untuk Trimurti.",
+                options: ["Benar (True)", "Salah (False)"],
+                answer: 0,
+                explanation: "Candi Prambanan dibangun pada abad ke-9 dan dipersembahkan untuk tiga dewa utama Hindu: Brahma, Wisnu, dan Siwa."
+            },
+            {
+                category: "Wawasan Nusantara",
+                type: "MC",
+                time: 25,
+                question: "Bunga raksasa endemik hutan Sumatra yang dikenal sebagai bunga tunggal terbesar di dunia tanpa akar, batang, maupun daun sejati adalah...",
+                options: ["Bunga Bangkai Raksasa", "Rafflesia arnoldii", "Anggrek Hitam", "Edelweis Jawa"],
+                answer: 1,
+                explanation: "Rafflesia arnoldii merupakan tumbuhan parasit holoparasit dengan diameter bunga mekar dapat mencapai lebih dari 1 meter."
+            },
+            {
+                category: "Wawasan Nusantara",
+                type: "MS",
+                time: 30,
+                question: "Manakah dari tarian tradisional berikut yang berasal dari Provinsi Bali? (Pilih 2 jawaban)",
+                options: ["Tari Kecak", "Tari Saman", "Tari Pendet", "Tari Piring"],
+                answer: [0, 2],
+                explanation: "Tari Kecak dan Tari Pendet berasal dari Bali, sedangkan Tari Saman berasal dari Aceh dan Tari Piring dari Sumatera Barat."
+            },
+            {
+                category: "Wawasan Nusantara",
+                type: "TEXT",
+                time: 25,
+                question: "Semboyan resmi negara Indonesia yang tertulis pada pita yang dicengkeram oleh burung Garuda Pancasila adalah...",
+                acceptedAnswers: ["bhinneka tunggal ika", "bhineka tunggal ika"],
+                explanation: "Bhinneka Tunggal Ika berasal dari Kitab Sutasoma karya Mpu Tantular yang bermakna 'Berbeda-beda tetapi tetap satu jua'."
+            },
+            {
+                category: "Wawasan Nusantara",
+                type: "MC",
+                time: 25,
+                question: "Sungai terpanjang di Indonesia yang mengalir sepanjang lebih dari 1.100 kilometer melintasi Provinsi Kalimantan Barat adalah...",
+                options: ["Sungai Mahakam", "Sungai Kapuas", "Sungai Musi", "Sungai Barito"],
+                answer: 1,
+                explanation: "Sungai Kapuas di Kalimantan Barat memiliki panjang sekitar 1.143 km dan menjadi sungai terpanjang di Indonesia sekaligus di pulau manapun di dunia."
+            }
+        ];
+
+        // ==========================================
+        // KATALOG POWER-UP & KELANGKAAN TERBOBOT
+        // ==========================================
+        const MAX_POWERUP_SLOTS = 2;
+        const POWERUP_CATALOG = {
+            DOUBLE_SCORE: {
+                id: 'DOUBLE_SCORE',
+                name: 'Skor 2x',
+                kind: 'buff',
+                rarity: 'LEGENDARY',
+                weight: 10, // Sangat langka (10% peluang)
+                icon: 'fa-bolt',
+                badgeClass: 'bg-amber-500/25 border-amber-400 text-amber-200',
+                desc: 'Menggandakan poin pada soal aktif ini!'
+            },
+            FIFTY_FIFTY: {
+                id: 'FIFTY_FIFTY',
+                name: '50:50',
+                kind: 'buff',
+                rarity: 'COMMON',
+                weight: 25,
+                icon: 'fa-scissors',
+                badgeClass: 'bg-sky-500/25 border-sky-400 text-sky-200',
+                desc: 'Menghapus 2 opsi jawaban yang salah.'
+            },
+            SHIELD: {
+                id: 'SHIELD',
+                name: 'Perisai',
+                kind: 'buff',
+                rarity: 'RARE',
+                weight: 20,
+                icon: 'fa-shield-halved',
+                badgeClass: 'bg-emerald-500/25 border-emerald-400 text-emerald-200',
+                desc: 'Menangkal otomatis serangan Debuff lawan.'
+            },
+            FREEZE_LEADER: {
+                id: 'FREEZE_LEADER',
+                name: 'Bekukan #1',
+                kind: 'debuff',
+                rarity: 'RARE',
+                weight: 20,
+                icon: 'fa-snowflake',
+                badgeClass: 'bg-cyan-500/25 border-cyan-400 text-cyan-200',
+                desc: 'Membekukan layar peringkat #1 selama 4 detik!'
+            },
+            GLITCH_SHUFFLE: {
+                id: 'GLITCH_SHUFFLE',
+                name: 'Acak Opsi',
+                kind: 'debuff',
+                rarity: 'COMMON',
+                weight: 25,
+                icon: 'fa-shuffle',
+                badgeClass: 'bg-fuchsia-500/25 border-fuchsia-400 text-fuchsia-200',
+                desc: 'Mengacak posisi tombol opsi lawan pada soal berikutnya.'
+            }
+        };
+
+        // State Aplikasi
+        const memoryStorage = {};
+        function safeGetStorage(key) {
+            try {
+                return window.localStorage.getItem(key);
+            } catch (e) {
+                return memoryStorage[key] || null;
+            }
+        }
+        function safeSetStorage(key, val) {
+            memoryStorage[key] = val;
+            try {
+                window.localStorage.setItem(key, val);
+            } catch (e) {}
+        }
+        function safeRemoveStorage(key) {
+            delete memoryStorage[key];
+            try {
+                window.localStorage.removeItem(key);
+            } catch (e) {}
+        }
+
+        let quizQuestions = [...DEFAULT_QUESTIONS];
+        try {
+            const storedQ = safeGetStorage('quiz_custom_questions_v2');
+            if (storedQ) {
+                const parsedQ = JSON.parse(storedQ);
+                if (Array.isArray(parsedQ) && parsedQ.length > 0) quizQuestions = parsedQ;
+            }
+        } catch (e) {}
+
+        let currentPlayerName = "";
+        let currentQuestionIndex = 0;
+        let score = 0;
+        let correctCount = 0;
+        let timerInterval = null;
+        let timeLeft = 30;
+        let selectedMultipleIndices = [];
+        let playerHistory = [];
+        let hasPlayedThisDevice = false;
+        let savedPlayerRecord = null;
+        let globalLeaderboardData = [];
+
+        // State Sesi Live Lobby & Kontrol Admin
+        let sessionMode = 'unconfigured'; // 'unconfigured' | 'free' | 'live_waiting' | 'live_started'
+        let liveSessionRunId = 'default';
+        let isInWaitingRoom = false;
+        let waitingRoomPlayers = [];
+        let activeFreePlayers = [];
+        let pendingDeleteTarget = null;
+
+        // State Kompetitif: Inventory 2 Slot, Streak Dinamis, & Debuff tiap 10 soal
+        function getStreakRewardTarget() {
+            return Math.max(3, Math.round((quizQuestions.length || 30) * 0.25));
+        }
+        function getBalancedStreakTarget() {
+            return getStreakRewardTarget();
+        }
+        const DEBUFF_MILESTONE_INTERVAL = 10; // Debuff diberikan tiap 10 soal
+
+        let powerupInventory = [null, null]; // Maksimal 2 slot
+        let currentStreak = 0;
+        let doubleScoreActiveThisQuestion = false;
+        let powerupUsedThisQuestion = false;
+        let isFrozenByOpponent = false;
+        let freezeRemainingSec = 0;
+        let freezeTimerInterval = null;
+        let glitchShuffleActiveForNext = false;
+        let immuneQuestionsRemaining = 0;
+        let awardedDebuffMilestones = new Set();
+
+        function updateLobbyCategoryStats() {
+            const totalEl = document.getElementById('lobby-total-questions-text');
+            if (totalEl) totalEl.innerText = `${quizQuestions.length} pertanyaan`;
+            const c1 = quizQuestions.filter(q => q.category === "Manusia & Hewan").length;
+            const c2 = quizQuestions.filter(q => q.category === "Logika & Hitungan").length;
+            const c3 = quizQuestions.filter(q => q.category === "Wawasan Nusantara").length;
+            const el1 = document.getElementById('lobby-count-cat1');
+            const el2 = document.getElementById('lobby-count-cat2');
+            const el3 = document.getElementById('lobby-count-cat3');
+            if (el1) el1.innerText = `${c1} Soal`;
+            if (el2) el2.innerText = `${c2} Soal`;
+            if (el3) el3.innerText = `${c3} Soal`;
+
+            const streakTarget = getStreakRewardTarget();
+            const milestones = getDebuffMilestones();
+            const hintEl = document.getElementById('hud-milestone-hint');
+            if (hintEl) {
+                const msText = milestones.length > 0 ? ` • Debuff di soal #${milestones.join(', #')}` : '';
+                hintEl.innerText = `• Item tiap ${streakTarget} benar beruntun${msText} (Maks. 2 Slot)`;
+            }
+        }
+
+        function getDebuffMilestones() {
+            const total = quizQuestions.length;
+            const milestones = [];
+            if (total >= 6) {
+                const mid = Math.ceil(total / 2);
+                milestones.push(mid);
+            }
+            for (let m = 10; m <= total; m += 10) {
+                if (!milestones.includes(m)) milestones.push(m);
+            }
+            return milestones.sort((a, b) => a - b);
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast-notification');
+            const msgEl = document.getElementById('toast-message');
+            if (!toast || !msgEl) return;
+            msgEl.innerText = msg;
+            toast.classList.remove('hidden');
+            clearTimeout(window._toastTimer);
+            window._toastTimer = setTimeout(() => {
+                toast.classList.add('hidden');
+            }, 3400);
+        }
+
+        // Fingerprint Perangkat Unik
+        function getDeviceId() {
+            let id = safeGetStorage('quiz_device_fingerprint_v1');
+            if (!id) {
+                let tz = 'UTC';
+                try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch (e) {}
+                const raw = [
+                    navigator.userAgent || 'UA',
+                    (screen.width || 0) + 'x' + (screen.height || 0),
+                    tz,
+                    Math.random().toString(36).substring(2, 10)
+                ].join('|');
+                let hash = 0;
+                for (let i = 0; i < raw.length; i++) {
+                    hash = ((hash << 5) - hash) + raw.charCodeAt(i);
+                    hash |= 0;
+                }
+                id = 'DEV-' + Math.abs(hash).toString(36).toUpperCase() + '-' + Date.now().toString(36).toUpperCase();
+                safeSetStorage('quiz_device_fingerprint_v1', id);
+            }
+            return id;
+        }
+        const DEVICE_ID = getDeviceId();
+
+        // ==========================================
+        // SINKRONISASI MODE SESI (DEFAULT MENUNGGU ADMIN & KUNCI SILANG)
+        // ==========================================
+        function getSessionLockFlags() {
+            const hasFreeEngagement = (globalLeaderboardData.length > 0 || activeFreePlayers.length > 0);
+            const hasLiveEngagement = (waitingRoomPlayers.length > 0 || sessionMode === 'live_started');
+            const isFreeLockedOut = (sessionMode === 'live_waiting' || sessionMode === 'live_started') && hasLiveEngagement;
+            const isLiveLockedOut = (sessionMode === 'free') && hasFreeEngagement;
+            return { hasFreeEngagement, hasLiveEngagement, isFreeLockedOut, isLiveLockedOut };
+        }
+
+        function applySessionModeUI() {
+            const badge = document.getElementById('lobby-mode-badge');
+            const startBtn = document.getElementById('btn-start-quiz');
+            const awaitingBanner = document.getElementById('awaiting-admin-mode-banner');
+            const inputContainer = document.getElementById('lobby-input-container');
+            const adminBtnFree = document.getElementById('btn-mode-free');
+            const adminBtnWait = document.getElementById('btn-mode-live-wait');
+            const adminBtnLiveStart = document.getElementById('btn-mode-live-start');
+            const adminLockBanner = document.getElementById('admin-lock-status-banner');
+
+            const { isFreeLockedOut, isLiveLockedOut } = getSessionLockFlags();
+
+            if (badge) {
+                if (sessionMode === 'unconfigured') {
+                    badge.className = "inline-flex items-center gap-1.5 text-xs font-extrabold px-3.5 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/40 animate-pulse";
+                    badge.innerHTML = `<i class="fa-solid fa-clock"></i> Menunggu Admin Memilih Mode Kuis`;
+                } else if (sessionMode === 'free') {
+                    badge.className = "inline-flex items-center gap-1.5 text-xs font-extrabold px-3.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30";
+                    badge.innerHTML = `<i class="fa-solid fa-door-open"></i> Mode Bebas (Langsung Main)`;
+                } else if (sessionMode === 'live_waiting') {
+                    badge.className = "inline-flex items-center gap-1.5 text-xs font-extrabold px-3.5 py-1 rounded-full bg-amber-500/25 text-amber-300 border border-amber-400/40 animate-pulse";
+                    badge.innerHTML = `<i class="fa-solid fa-hourglass-half"></i> Mode Live: Menunggu Admin Memulai`;
+                } else {
+                    badge.className = "inline-flex items-center gap-1.5 text-xs font-extrabold px-3.5 py-1 rounded-full bg-rose-500/25 text-rose-300 border border-rose-400/40";
+                    badge.innerHTML = `<i class="fa-solid fa-fire"></i> Live Sedang Berlangsung!`;
+                }
+            }
+
+            // Atur visibilitas form nama & tombol mulai di Beranda
+            if (!hasPlayedThisDevice) {
+                if (sessionMode === 'unconfigured') {
+                    if (awaitingBanner) awaitingBanner.classList.remove('hidden');
+                    if (inputContainer) inputContainer.classList.add('hidden');
+                    if (startBtn) {
+                        startBtn.disabled = true;
+                        startBtn.className = "flex-1 bg-white/10 text-purple-300/60 font-bold text-base py-4 px-6 rounded-2xl border border-white/10 cursor-not-allowed flex items-center justify-center gap-2";
+                        startBtn.innerHTML = `<i class="fa-solid fa-hourglass-start"></i> Menunggu Admin...`;
+                    }
+                } else {
+                    if (awaitingBanner) awaitingBanner.classList.add('hidden');
+                    if (inputContainer) inputContainer.classList.remove('hidden');
+                    if (startBtn) {
+                        startBtn.disabled = false;
+                        startBtn.className = "flex-1 bg-gradient-to-r from-emerald-400 to-teal-500 hover:from-emerald-500 hover:to-teal-600 text-slate-950 font-extrabold text-lg py-4 px-8 rounded-2xl shadow-lg transform transition active:scale-95 flex items-center justify-center gap-2 cursor-pointer";
+                        startBtn.innerHTML = sessionMode === 'live_waiting'
+                            ? `<i class="fa-solid fa-right-to-bracket"></i> Gabung Ruang Tunggu Live`
+                            : `<i class="fa-solid fa-play"></i> Mulai Kuis Sekarang`;
+                    }
+                }
+            } else {
+                if (awaitingBanner) awaitingBanner.classList.add('hidden');
+            }
+
+            // Update tombol & indikator penguncian di Panel Admin
+            if (adminBtnFree && adminBtnWait && adminBtnLiveStart) {
+                adminBtnFree.disabled = isFreeLockedOut;
+                adminBtnFree.className = isFreeLockedOut
+                    ? "px-3.5 py-2 rounded-xl text-xs font-extrabold border bg-white/5 text-purple-300/40 border-white/10 cursor-not-allowed"
+                    : `px-3.5 py-2 rounded-xl text-xs font-extrabold border transition cursor-pointer ${sessionMode === 'free' ? 'bg-indigo-500 text-white border-indigo-300' : 'bg-white/10 text-purple-200 border-white/15 hover:bg-white/20'}`;
+                adminBtnFree.innerHTML = isFreeLockedOut
+                    ? `<i class="fa-solid fa-lock mr-1"></i> Mode Bebas (Terkunci)`
+                    : `<i class="fa-solid fa-door-open mr-1"></i> Mode Bebas`;
+
+                adminBtnWait.disabled = isLiveLockedOut;
+                adminBtnWait.className = isLiveLockedOut
+                    ? "px-3.5 py-2 rounded-xl text-xs font-extrabold border bg-white/5 text-purple-300/40 border-white/10 cursor-not-allowed"
+                    : `px-3.5 py-2 rounded-xl text-xs font-extrabold border transition cursor-pointer ${sessionMode === 'live_waiting' ? 'bg-amber-400 text-slate-950 border-amber-200' : 'bg-white/10 text-purple-200 border-white/15 hover:bg-white/20'}`;
+                adminBtnWait.innerHTML = isLiveLockedOut
+                    ? `<i class="fa-solid fa-lock mr-1"></i> Live Terkunci`
+                    : `<i class="fa-solid fa-hourglass-half mr-1"></i> Buka Lobby Live`;
+
+                adminBtnLiveStart.disabled = isLiveLockedOut || sessionMode === 'unconfigured' || sessionMode === 'free';
+                adminBtnLiveStart.className = (isLiveLockedOut || sessionMode === 'unconfigured' || sessionMode === 'free')
+                    ? "bg-white/5 text-purple-300/40 border border-white/10 font-extrabold text-xs sm:text-sm py-2 px-4 rounded-xl cursor-not-allowed flex items-center gap-1.5"
+                    : "bg-emerald-400 hover:bg-emerald-500 text-slate-950 font-extrabold text-xs sm:text-sm py-2 px-4 rounded-xl shadow transition flex items-center gap-1.5 cursor-pointer";
+            }
+
+            if (adminLockBanner) {
+                if (sessionMode === 'unconfigured') {
+                    adminLockBanner.innerHTML = `<i class="fa-solid fa-clock text-amber-300 mr-1.5"></i>Beranda peserta saat ini <strong>terkunci menunggu</strong> kamu memilih <strong>Mode Bebas</strong> atau <strong>Buka Lobby Live</strong>.`;
+                } else if (isLiveLockedOut) {
+                    adminLockBanner.innerHTML = `<i class="fa-solid fa-lock text-emerald-300 mr-1.5"></i><strong>Mode Bebas Aktif:</strong> Fitur Live dikunci karena sudah ada peserta yang mengerjakan/selesai (${activeFreePlayers.length} aktif, ${globalLeaderboardData.length} selesai).`;
+                } else if (isFreeLockedOut) {
+                    adminLockBanner.innerHTML = `<i class="fa-solid fa-lock text-amber-300 mr-1.5"></i><strong>Mode Live Aktif:</strong> Mode Bebas dikunci karena sesi Live sudah memiliki peserta di lobby / sedang berjalan.`;
+                } else if (sessionMode === 'free') {
+                    adminLockBanner.innerHTML = `<i class="fa-solid fa-door-open text-emerald-300 mr-1.5"></i><strong>Mode Bebas Aktif:</strong> Peserta dapat mulai mengerjakan kapan saja.`;
+                } else {
+                    adminLockBanner.innerHTML = `<i class="fa-solid fa-hourglass-half text-amber-300 mr-1.5"></i><strong>Lobby Live Terbuka:</strong> Menunggu peserta bergabung sebelum kamu menekan <em>Mulai Live Sekarang!</em>`;
+                }
+            }
+
+            // Jika pemain sedang di Waiting Room dan Admin menekan Mulai Live Sekarang!
+            if (isInWaitingRoom && sessionMode === 'live_started' && !hasPlayedThisDevice) {
+                isInWaitingRoom = false;
+                document.getElementById('screen-waiting-room').classList.add('hidden');
+                beginQuizGameplay(currentPlayerName);
+            }
+        }
+
+        function setSessionMode(newMode) {
+            const { isFreeLockedOut, isLiveLockedOut } = getSessionLockFlags();
+            if (newMode === 'free' && isFreeLockedOut) {
+                showToast("Mode Bebas terkunci karena sesi Live sudah memiliki peserta/berjalan!");
+                return;
+            }
+            if ((newMode === 'live_waiting' || newMode === 'live_started') && isLiveLockedOut) {
+                showToast("Fitur Live terkunci karena sudah ada peserta yang mengerjakan/selesai di Mode Bebas!");
+                return;
+            }
+
+            sessionMode = newMode;
+            if (newMode === 'live_started') {
+                liveSessionRunId = 'LIVE-' + Date.now();
+            }
+            applySessionModeUI();
+            if (typeof window.saveSessionStateToCloud === 'function') {
+                window.saveSessionStateToCloud({
+                    mode: sessionMode,
+                    runId: liveSessionRunId,
+                    updatedAt: Date.now()
+                });
+            }
+            const labels = {
+                'free': 'Mode Bebas diaktifkan! Peserta di beranda kini bisa mulai mengerjakan.',
+                'live_waiting': 'Ruang Tunggu Live dibuka! Peserta yang masuk akan menunggu aba-aba mulai.',
+                'live_started': 'Kuis Live DIMULAI serentak untuk semua peserta di ruang tunggu!'
+            };
+            showToast(labels[newMode] || 'Mode diperbarui');
+        }
+
+        function resetSessionModeSelection() {
+            sessionMode = 'unconfigured';
+            applySessionModeUI();
+            if (typeof window.saveSessionStateToCloud === 'function') {
+                window.saveSessionStateToCloud({
+                    mode: 'unconfigured',
+                    runId: 'reset-' + Date.now(),
+                    updatedAt: Date.now()
+                });
+            }
+            if (typeof window.clearActiveSessionPlayersCloud === 'function') {
+                window.clearActiveSessionPlayersCloud();
+            }
+            showToast("Mode sesi dikembalikan ke Menunggu Admin.");
+        }
+
+        function renderWaitingPlayersUI() {
+            const countEl = document.getElementById('waiting-players-count');
+            const listEl = document.getElementById('waiting-players-list');
+            const adminCountEl = document.getElementById('admin-waiting-count');
+            const adminNamesEl = document.getElementById('admin-waiting-names');
+
+            if (countEl) countEl.innerText = `${waitingRoomPlayers.length} Bergabung`;
+            if (adminCountEl) adminCountEl.innerText = `${waitingRoomPlayers.length} orang`;
+
+            if (listEl) {
+                listEl.innerHTML = waitingRoomPlayers.map(p => `
+                    <span class="px-3 py-1.5 rounded-xl text-xs font-bold ${p.deviceId === DEVICE_ID ? 'bg-amber-400 text-slate-950' : 'bg-white/15 text-white border border-white/15'}">
+                        <i class="fa-solid fa-user mr-1"></i>${escapeHtml(p.name)} ${p.deviceId === DEVICE_ID ? '(Kamu)' : ''}
+                    </span>
+                `).join('');
+            }
+
+            if (adminNamesEl) {
+                adminNamesEl.innerHTML = waitingRoomPlayers.map(p => `
+                    <span class="px-2 py-0.5 rounded-md bg-white/10 text-purple-100 text-[11px] font-semibold">
+                        ${escapeHtml(p.name)}
+                    </span>
+                `).join('');
+            }
+        }
+
+        // Cek Kunci 1 Kali Bermain dari Storage
+        function checkLocalLockState() {
+            const localRec = safeGetStorage('quiz_completed_record_' + DEVICE_ID);
+            if (localRec) {
+                try {
+                    const parsed = JSON.parse(localRec);
+                    applyDeviceLockUI(parsed);
+                } catch (e) {}
+            }
+        }
+
+        function applyDeviceLockUI(record) {
+            hasPlayedThisDevice = true;
+            savedPlayerRecord = record;
+            const awaitingBanner = document.getElementById('awaiting-admin-mode-banner');
+            const inputContainer = document.getElementById('lobby-input-container');
+            const banner = document.getElementById('already-played-banner');
+            const infoText = document.getElementById('already-played-info');
+            const startBtn = document.getElementById('btn-start-quiz');
+            const lbBtn = document.getElementById('btn-lobby-leaderboard');
+
+            if (awaitingBanner) awaitingBanner.classList.add('hidden');
+            if (inputContainer) inputContainer.classList.add('hidden');
+            if (banner) banner.classList.remove('hidden');
+            if (infoText && record) {
+                infoText.innerHTML = `Kamu sudah menyelesaikan kuis sebagai <strong>${escapeHtml(record.name)}</strong> dengan skor <strong>${record.score}</strong> (${record.correct}/${record.totalQuestions || quizQuestions.length} benar).`;
+            }
+            if (startBtn) {
+                startBtn.disabled = true;
+                startBtn.className = "flex-1 bg-white/10 text-purple-300/60 font-bold text-base py-4 px-6 rounded-2xl border border-white/10 cursor-not-allowed flex items-center justify-center gap-2";
+                startBtn.innerHTML = `<i class="fa-solid fa-lock"></i> Kuis Sudah Selesai`;
+            }
+            if (lbBtn) lbBtn.classList.remove('hidden');
+        }
+
+        function unlockThisDeviceUI() {
+            safeRemoveStorage('quiz_completed_record_' + DEVICE_ID);
+            hasPlayedThisDevice = false;
+            savedPlayerRecord = null;
+            const banner = document.getElementById('already-played-banner');
+            if (banner) banner.classList.add('hidden');
+            applySessionModeUI();
+        }
+
+        // ==========================================
+        // ALUR MASUK LOBBY / WAITING ROOM / MULAI KUIS
+        // ==========================================
+        function handleLobbyStartClick() {
+            if (hasPlayedThisDevice || sessionMode === 'unconfigured') return;
+
+            const nameInput = document.getElementById('player-name');
+            const nameError = document.getElementById('name-error');
+            const nameVal = nameInput.value.trim();
+
+            if (!nameVal) {
+                nameError.classList.remove('hidden');
+                nameInput.focus();
+                return;
+            }
+            nameError.classList.add('hidden');
+            currentPlayerName = nameVal;
+
+            if (sessionMode === 'live_waiting') {
+                isInWaitingRoom = true;
+                document.getElementById('waiting-my-name').innerText = nameVal;
+                document.getElementById('screen-start').classList.add('hidden');
+                document.getElementById('screen-waiting-room').classList.remove('hidden');
+                if (typeof window.joinWaitingRoomCloud === 'function') {
+                    window.joinWaitingRoomCloud({ deviceId: DEVICE_ID, name: nameVal, joinedAt: Date.now() });
+                }
+            } else {
+                beginQuizGameplay(nameVal);
+            }
+        }
+
+        function leaveWaitingRoom() {
+            isInWaitingRoom = false;
+            document.getElementById('screen-waiting-room').classList.add('hidden');
+            document.getElementById('screen-start').classList.remove('hidden');
+            if (typeof window.leaveWaitingRoomCloud === 'function') {
+                window.leaveWaitingRoomCloud(DEVICE_ID);
+            }
+        }
+
+        function beginQuizGameplay(playerName) {
+            if (!quizQuestions || quizQuestions.length === 0) {
+                quizQuestions = [...DEFAULT_QUESTIONS];
+            }
+
+            if (typeof window.leaveWaitingRoomCloud === 'function') {
+                window.leaveWaitingRoomCloud(DEVICE_ID);
+            }
+
+            // Catat pemain sebagai peserta aktif pada sesi berjalan agar penguncian mode bekerja
+            if (typeof window.registerActivePlayerCloud === 'function') {
+                window.registerActivePlayerCloud({
+                    deviceId: DEVICE_ID,
+                    name: playerName,
+                    mode: sessionMode,
+                    startedAt: Date.now()
+                });
+            }
+
+            currentPlayerName = playerName;
+            currentQuestionIndex = 0;
+            score = 0;
+            correctCount = 0;
+            playerHistory = [];
+            powerupInventory = [null, null];
+            currentStreak = 0;
+            doubleScoreActiveThisQuestion = false;
+            powerupUsedThisQuestion = false;
+            isFrozenByOpponent = false;
+            freezeRemainingSec = 0;
+            clearInterval(freezeTimerInterval);
+            glitchShuffleActiveForNext = false;
+            immuneQuestionsRemaining = 0;
+            awardedDebuffMilestones = new Set();
+
+            document.getElementById('freeze-overlay').classList.add('hidden');
+            document.getElementById('current-score').innerText = '0';
+            document.getElementById('screen-start').classList.add('hidden');
+            document.getElementById('screen-waiting-room').classList.add('hidden');
+            document.getElementById('screen-leaderboard').classList.add('hidden');
+            document.getElementById('screen-quiz').classList.remove('hidden');
+
+            renderInventoryUI();
+            loadQuestion();
+        }
+
+        // ==========================================
+        // SISTEM POWER-UP SEIMBANG (2 SLOT INVENTORY)
+        // ==========================================
+        function rollWeightedPowerup(onlyKind = null) {
+            const pool = Object.values(POWERUP_CATALOG).filter(item => !onlyKind || item.kind === onlyKind);
+            const totalWeight = pool.reduce((sum, item) => sum + item.weight, 0);
+            let r = Math.random() * totalWeight;
+            for (const item of pool) {
+                if (r < item.weight) return item.id;
+                r -= item.weight;
+            }
+            return pool[0] ? pool[0].id : 'FIFTY_FIFTY';
+        }
+
+        function grantPowerupToInventory(powerupId, sourceLabel = '') {
+            const spec = POWERUP_CATALOG[powerupId];
+            if (!spec) return false;
+            const emptyIdx = powerupInventory.findIndex(slot => slot === null);
+            if (emptyIdx === -1) {
+                score += 50;
+                document.getElementById('current-score').innerText = score;
+                showToast(`Slot penuh (Maks. 2)! ${sourceLabel ? sourceLabel + ' ' : ''}dikonversi menjadi +50 poin bonus.`);
+                renderInventoryUI();
+                return false;
+            }
+            powerupInventory[emptyIdx] = powerupId;
+            renderInventoryUI();
+            showToast(`${sourceLabel ? sourceLabel + ': ' : ''}Dapat item ${spec.name}!`);
+            return true;
+        }
+
+        function renderInventoryUI() {
+            const targetStreak = getStreakRewardTarget();
+            const streakEl = document.getElementById('hud-streak-count');
+            if (streakEl && streakEl.parentElement) {
+                streakEl.parentElement.innerHTML = `<i class="fa-solid fa-fire mr-1"></i>Streak: <span id="hud-streak-count">${currentStreak}</span>/${targetStreak}`;
+            }
+
+            const slotsContainer = document.getElementById('inventory-slots');
+            if (!slotsContainer) return;
+            slotsContainer.innerHTML = '';
+
+            for (let i = 0; i < MAX_POWERUP_SLOTS; i++) {
+                const itemId = powerupInventory[i];
+                const slotDiv = document.createElement('div');
+                if (!itemId || !POWERUP_CATALOG[itemId]) {
+                    slotDiv.className = "rounded-xl border border-dashed border-white/20 bg-slate-950/30 px-3 py-2 text-[11px] text-purple-300/60 flex items-center justify-center font-semibold";
+                    slotDiv.innerHTML = `<span>Slot ${i + 1} Kosong</span>`;
+                } else {
+                    const spec = POWERUP_CATALOG[itemId];
+                    const disabledUse = powerupUsedThisQuestion || isFrozenByOpponent;
+                    slotDiv.className = `rounded-xl border px-3 py-1.5 flex items-center justify-between gap-2 ${spec.badgeClass}`;
+                    slotDiv.innerHTML = `
+                        <div class="flex items-center gap-1.5 min-w-0" title="${spec.desc}">
+                            <i class="fa-solid ${spec.icon} shrink-0"></i>
+                            <span class="text-xs font-extrabold truncate">${spec.name}</span>
+                        </div>
+                        <button onclick="activatePowerupSlot(${i})" ${disabledUse ? 'disabled' : ''}
+                            class="text-[11px] font-extrabold px-2 py-1 rounded-lg bg-white/90 hover:bg-white text-slate-950 disabled:opacity-40 disabled:cursor-not-allowed transition shrink-0 cursor-pointer">
+                            Pakai
+                        </button>
+                    `;
+                }
+                slotsContainer.appendChild(slotDiv);
+            }
+        }
+
+        function activatePowerupSlot(slotIdx) {
+            if (powerupUsedThisQuestion || isFrozenByOpponent) return;
+            const fbVisible = !document.getElementById('feedback-box').classList.contains('hidden');
+            if (fbVisible) {
+                showToast("Gunakan item sebelum menjawab soal!");
+                return;
+            }
+
+            const itemId = powerupInventory[slotIdx];
+            const spec = itemId && POWERUP_CATALOG[itemId];
+            if (!spec) return;
+
+            const q = quizQuestions[currentQuestionIndex];
+            if (itemId === 'FIFTY_FIFTY' && (q.type !== 'MC' && q.type !== 'MS')) {
+                showToast("Item 50:50 hanya bisa dipakai pada soal pilihan ganda!");
+                return;
+            }
+
+            powerupInventory[slotIdx] = null;
+            powerupUsedThisQuestion = true;
+
+            if (itemId === 'DOUBLE_SCORE') {
+                doubleScoreActiveThisQuestion = true;
+                showToast("Skor 2x aktif untuk soal ini!");
+            } else if (itemId === 'FIFTY_FIFTY') {
+                applyFiftyFiftyToCurrentQuestion(q);
+                showToast("2 opsi jawaban yang salah telah dihapus!");
+            } else if (itemId === 'SHIELD') {
+                immuneQuestionsRemaining = Math.max(immuneQuestionsRemaining, 2);
+                showToast("Perisai aktif! Kamu kebal terhadap Debuff lawan.");
+            } else if (itemId === 'FREEZE_LEADER') {
+                triggerSabotageOnLeader('FREEZE_LEADER');
+            } else if (itemId === 'GLITCH_SHUFFLE') {
+                triggerSabotageOnLeader('GLITCH_SHUFFLE');
+            }
+
+            renderInventoryUI();
+        }
+
+        function applyFiftyFiftyToCurrentQuestion(q) {
+            const correctIndices = Array.isArray(q.answer) ? q.answer : [q.answer];
+            const buttons = Array.from(document.querySelectorAll('#options-container button'));
+            const wrongButtons = buttons.filter(btn => {
+                const origIdx = parseInt(btn.dataset.origIdx, 10);
+                return !correctIndices.includes(origIdx);
+            });
+            wrongButtons.sort(() => Math.random() - 0.5);
+            wrongButtons.slice(0, 2).forEach(btn => {
+                btn.disabled = true;
+                btn.classList.add('opacity-20', 'pointer-events-none', 'line-through');
+            });
+        }
+
+        function triggerSabotageOnLeader(debuffType) {
+            // Prioritaskan lawan yang sedang online/tertinggi di klasemen
+            const candidates = globalLeaderboardData.filter(p => p.deviceId && p.deviceId !== DEVICE_ID);
+            if (candidates.length === 0) {
+                score += 100;
+                document.getElementById('current-score').innerText = score;
+                showToast("Belum ada lawan aktif di klasemen — kamu mendapat +100 poin bonus!");
+                return;
+            }
+            candidates.sort((a, b) => (b.score || 0) - (a.score || 0));
+            const targetPlayer = candidates[0];
+
+            if (typeof window.sendSabotageToCloud === 'function') {
+                window.sendSabotageToCloud({
+                    targetDeviceId: targetPlayer.deviceId,
+                    targetName: targetPlayer.name,
+                    attackerDeviceId: DEVICE_ID,
+                    attackerName: currentPlayerName,
+                    type: debuffType,
+                    createdAt: Date.now()
+                });
+            }
+            const label = debuffType === 'FREEZE_LEADER' ? 'Bekukan #1' : 'Acak Opsi';
+            showToast(`Debuff ${label} dikirim ke ${targetPlayer.name}!`);
+        }
+
+        window.handleIncomingSabotage = function(sabotageDoc) {
+            if (!sabotageDoc || sabotageDoc.targetDeviceId !== DEVICE_ID) return;
+            if (document.getElementById('screen-quiz').classList.contains('hidden')) return;
+
+            if (immuneQuestionsRemaining > 0) {
+                showToast(`Perisai menangkis serangan ${sabotageDoc.attackerName || 'lawan'}!`);
+                return;
+            }
+
+            immuneQuestionsRemaining = 1; // Perlindungan anti-spam 1 soal penuh
+            renderInventoryUI();
+
+            if (sabotageDoc.type === 'FREEZE_LEADER') {
+                isFrozenByOpponent = true;
+                freezeRemainingSec = 4;
+                clearInterval(timerInterval);
+
+                const overlay = document.getElementById('freeze-overlay');
+                const attackerEl = document.getElementById('freeze-attacker-text');
+                const countEl = document.getElementById('freeze-countdown');
+                if (attackerEl) attackerEl.innerText = `${sabotageDoc.attackerName || 'Lawan'} membekukan layarmu! Timer dijeda sementara hingga es mencair.`;
+                if (countEl) countEl.innerText = freezeRemainingSec;
+                if (overlay) overlay.classList.remove('hidden');
+
+                renderInventoryUI();
+
+                clearInterval(freezeTimerInterval);
+                freezeTimerInterval = setInterval(() => {
+                    freezeRemainingSec--;
+                    if (countEl) countEl.innerText = Math.max(0, freezeRemainingSec);
+                    if (freezeRemainingSec <= 0) {
+                        clearInterval(freezeTimerInterval);
+                        isFrozenByOpponent = false;
+                        if (overlay) overlay.classList.add('hidden');
+                        renderInventoryUI();
+                        resumeQuestionTimerOnly();
+                    }
+                }, 1000);
+            } else if (sabotageDoc.type === 'GLITCH_SHUFFLE') {
+                glitchShuffleActiveForNext = true;
+                showToast(`Opsi jawabanmu diacak oleh ${sabotageDoc.attackerName || 'lawan'} pada soal berikutnya!`);
+            }
+        };
+
+        function resumeQuestionTimerOnly() {
+            const q = quizQuestions[currentQuestionIndex];
+            if (!q || !document.getElementById('feedback-box').classList.contains('hidden')) return;
+            const totalTime = q.time || 25;
+            clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                if (isFrozenByOpponent) return;
+                timeLeft--;
+                document.getElementById('timer-text').innerText = Math.max(0, timeLeft);
+                const pct = Math.max(0, (timeLeft / totalTime) * 100);
+                document.getElementById('timer-bar').style.width = `${pct}%`;
+                if (timeLeft <= 0) {
+                    clearInterval(timerInterval);
+                    handleTimeOut();
+                }
+            }, 1000);
+        }
+
+        function loadQuestion() {
+            clearInterval(timerInterval);
+            selectedMultipleIndices = [];
+            doubleScoreActiveThisQuestion = false;
+            powerupUsedThisQuestion = false;
+
+            if (immuneQuestionsRemaining > 0) {
+                immuneQuestionsRemaining--;
+            }
+
+            // Cek milestone dinamis (tengah kuis & kelipatan 10) untuk memberikan 1 Debuff otomatis
+            const questionNumber = currentQuestionIndex + 1;
+            const milestones = getDebuffMilestones();
+            if (milestones.includes(questionNumber) && !awardedDebuffMilestones.has(questionNumber)) {
+                awardedDebuffMilestones.add(questionNumber);
+                const debuffRolled = rollWeightedPowerup('debuff');
+                grantPowerupToInventory(debuffRolled, `Bonus Soal #${questionNumber}`);
+            }
+
+            renderInventoryUI();
+
+            const q = quizQuestions[currentQuestionIndex];
+            const totalQ = quizQuestions.length;
+
+            document.getElementById('question-counter').innerText = `${currentQuestionIndex + 1} / ${totalQ}`;
+            document.getElementById('category-badge').innerText = q.category;
+            document.getElementById('question-text').innerText = q.question;
+
+            const typeLabels = {
+                'MC': 'Multiple Choice (Pilih 1)',
+                'TF': 'True or False (Benar / Salah)',
+                'MS': 'Multiple Select (Pilih Beberapa)',
+                'TEXT': 'Isian Singkat (Ketik Jawaban)'
+            };
+            document.getElementById('question-type-label').innerText = typeLabels[q.type] || q.type;
+
+            document.getElementById('feedback-box').classList.add('hidden');
+            document.getElementById('submit-action-container').classList.add('hidden');
+
+            const optionsContainer = document.getElementById('options-container');
+            optionsContainer.innerHTML = '';
+
+            const shouldShuffleOpts = glitchShuffleActiveForNext && (q.type === 'MC' || q.type === 'MS');
+            if (glitchShuffleActiveForNext) {
+                glitchShuffleActiveForNext = false;
+                optionsContainer.classList.add('glitch-active');
+                setTimeout(() => optionsContainer.classList.remove('glitch-active'), 800);
+            }
+
+            if (q.type === 'MC' || q.type === 'TF') {
+                const colors = [
+                    'from-blue-600/80 to-indigo-700/80 border-blue-400/40',
+                    'from-emerald-600/80 to-teal-700/80 border-emerald-400/40',
+                    'from-amber-600/80 to-orange-700/80 border-amber-400/40',
+                    'from-rose-600/80 to-pink-700/80 border-rose-400/40'
+                ];
+                const letters = ['A', 'B', 'C', 'D'];
+                const indices = q.options.map((_, i) => i);
+                if (shouldShuffleOpts) {
+                    for (let i = indices.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [indices[i], indices[j]] = [indices[j], indices[i]];
+                    }
+                }
+
+                indices.forEach((origIdx, dispIdx) => {
+                    const optText = q.options[origIdx];
+                    const btn = document.createElement('button');
+                    btn.dataset.origIdx = String(origIdx);
+                    btn.className = `option-btn w-full text-left p-4 rounded-2xl bg-gradient-to-r ${colors[dispIdx % colors.length]} border font-bold text-base sm:text-lg flex items-center gap-4 cursor-pointer`;
+                    btn.innerHTML = `
+                        <span class="w-9 h-9 rounded-xl bg-black/30 flex items-center justify-center font-extrabold text-sm shrink-0">${letters[dispIdx]}</span>
+                        <span>${escapeHtml(optText)}</span>
+                    `;
+                    btn.onclick = () => handleSingleChoice(origIdx);
+                    optionsContainer.appendChild(btn);
+                });
+            } else if (q.type === 'MS') {
+                const indices = q.options.map((_, i) => i);
+                if (shouldShuffleOpts) {
+                    for (let i = indices.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [indices[i], indices[j]] = [indices[j], indices[i]];
+                    }
+                }
+                indices.forEach((origIdx) => {
+                    const optText = q.options[origIdx];
+                    const btn = document.createElement('button');
+                    btn.id = `ms-opt-${origIdx}`;
+                    btn.dataset.origIdx = String(origIdx);
+                    btn.className = `option-btn w-full text-left p-4 rounded-2xl bg-white/10 hover:bg-white/15 border-2 border-white/20 font-bold text-base flex items-center justify-between gap-4 cursor-pointer`;
+                    btn.innerHTML = `
+                        <span>${escapeHtml(optText)}</span>
+                        <span id="ms-check-${origIdx}" class="w-7 h-7 rounded-lg border-2 border-white/40 flex items-center justify-center text-sm"></span>
+                    `;
+                    btn.onclick = () => toggleMultipleChoice(origIdx);
+                    optionsContainer.appendChild(btn);
+                });
+                document.getElementById('submit-action-container').classList.remove('hidden');
+            } else if (q.type === 'TEXT') {
+                optionsContainer.innerHTML = `
+                    <div>
+                        <input type="text" id="text-answer-input" placeholder="Ketik jawabanmu di sini..." autocomplete="off"
+                            class="w-full px-5 py-4 rounded-2xl bg-white text-slate-900 font-bold text-lg placeholder-slate-400 focus:outline-none focus:ring-4 focus:ring-amber-400">
+                    </div>
+                `;
+                document.getElementById('submit-action-container').classList.remove('hidden');
+                setTimeout(() => {
+                    const inp = document.getElementById('text-answer-input');
+                    if (inp) {
+                        inp.focus();
+                        inp.addEventListener('keypress', (e) => {
+                            if (e.key === 'Enter') submitComplexAnswer();
+                        });
+                    }
+                }, 50);
+            }
+
+            // Mulai Timer (terjeda otomatis bila layar membeku agar adil)
+            timeLeft = q.time || 25;
+            const totalTime = timeLeft;
+            document.getElementById('timer-text').innerText = timeLeft;
+            const timerBar = document.getElementById('timer-bar');
+            timerBar.style.transition = 'none';
+            timerBar.style.width = '100%';
+
+            setTimeout(() => {
+                timerBar.style.transition = 'width 1s linear';
+            }, 30);
+
+            timerInterval = setInterval(() => {
+                if (isFrozenByOpponent) return;
+                timeLeft--;
+                document.getElementById('timer-text').innerText = Math.max(0, timeLeft);
+                const pct = Math.max(0, (timeLeft / totalTime) * 100);
+                timerBar.style.width = `${pct}%`;
+
+                if (timeLeft <= 0) {
+                    clearInterval(timerInterval);
+                    handleTimeOut();
+                }
+            }, 1000);
+        }
+
+        function handleSingleChoice(selectedIdx) {
+            if (isFrozenByOpponent) return;
+            clearInterval(timerInterval);
+            const q = quizQuestions[currentQuestionIndex];
+            const isCorrect = (selectedIdx === q.answer);
+            const buttons = document.querySelectorAll('#options-container button');
+
+            buttons.forEach((btn) => {
+                btn.disabled = true;
+                const origIdx = parseInt(btn.dataset.origIdx, 10);
+                if (origIdx === q.answer) {
+                    btn.className = "w-full text-left p-4 rounded-2xl bg-emerald-500 text-slate-950 border-2 border-emerald-300 font-extrabold text-base sm:text-lg flex items-center gap-4 shadow-lg";
+                } else if (origIdx === selectedIdx && !isCorrect) {
+                    btn.className = "w-full text-left p-4 rounded-2xl bg-rose-600/90 text-white border-2 border-rose-400 font-bold text-base sm:text-lg flex items-center gap-4 opacity-90";
+                } else {
+                    btn.classList.add('opacity-40');
+                }
+            });
+
+            const userAnswerText = q.options[selectedIdx];
+            const correctAnswerText = q.options[q.answer];
+            finalizeQuestionResult(isCorrect, userAnswerText, correctAnswerText);
+        }
+
+        function toggleMultipleChoice(idx) {
+            if (isFrozenByOpponent) return;
+            const btn = document.getElementById(`ms-opt-${idx}`);
+            const box = document.getElementById(`ms-check-${idx}`);
+            const pos = selectedMultipleIndices.indexOf(idx);
+
+            if (pos === -1) {
+                selectedMultipleIndices.push(idx);
+                btn.classList.add('border-amber-400', 'bg-amber-500/20');
+                box.classList.add('bg-amber-400', 'border-amber-400', 'text-slate-950');
+                box.innerHTML = '<i class="fa-solid fa-check"></i>';
+            } else {
+                selectedMultipleIndices.splice(pos, 1);
+                btn.classList.remove('border-amber-400', 'bg-amber-500/20');
+                box.classList.remove('bg-amber-400', 'border-amber-400', 'text-slate-950');
+                box.innerHTML = '';
+            }
+        }
+
+        function submitComplexAnswer() {
+            if (isFrozenByOpponent) return;
+            const q = quizQuestions[currentQuestionIndex];
+
+            if (q.type === 'MS') {
+                if (selectedMultipleIndices.length === 0) return;
+                clearInterval(timerInterval);
+                document.getElementById('submit-action-container').classList.add('hidden');
+
+                const sortedSelected = [...selectedMultipleIndices].sort((a, b) => a - b);
+                const sortedCorrect = [...q.answer].sort((a, b) => a - b);
+                const isCorrect = JSON.stringify(sortedSelected) === JSON.stringify(sortedCorrect);
+
+                q.options.forEach((_, idx) => {
+                    const btn = document.getElementById(`ms-opt-${idx}`);
+                    btn.disabled = true;
+                    if (sortedCorrect.includes(idx)) {
+                        btn.className = "w-full text-left p-4 rounded-2xl bg-emerald-500 text-slate-950 border-2 border-emerald-300 font-extrabold text-base flex items-center justify-between gap-4";
+                    } else if (sortedSelected.includes(idx)) {
+                        btn.className = "w-full text-left p-4 rounded-2xl bg-rose-600 text-white border-2 border-rose-400 font-bold text-base flex items-center justify-between gap-4";
+                    } else {
+                        btn.classList.add('opacity-40');
+                    }
+                });
+
+                const userAnswerText = sortedSelected.map(i => q.options[i]).join(', ');
+                const correctAnswerText = sortedCorrect.map(i => q.options[i]).join(', ');
+                finalizeQuestionResult(isCorrect, userAnswerText, correctAnswerText);
+
+            } else if (q.type === 'TEXT') {
+                const inp = document.getElementById('text-answer-input');
+                const val = inp ? inp.value.trim() : '';
+                if (!val) return;
+
+                clearInterval(timerInterval);
+                inp.disabled = true;
+                document.getElementById('submit-action-container').classList.add('hidden');
+
+                const normalized = val.toLowerCase();
+                const isCorrect = q.acceptedAnswers.some(ans => ans.toLowerCase().trim() === normalized);
+                const correctAnswerText = q.acceptedAnswers[0].toUpperCase();
+                finalizeQuestionResult(isCorrect, val, correctAnswerText);
+            }
+        }
+
+        function handleTimeOut() {
+            const q = quizQuestions[currentQuestionIndex];
+            document.getElementById('submit-action-container').classList.add('hidden');
+            document.querySelectorAll('#options-container button, #options-container input').forEach(el => el.disabled = true);
+
+            let correctText = "";
+            if (q.type === 'MC' || q.type === 'TF') correctText = q.options[q.answer];
+            else if (q.type === 'MS') correctText = q.answer.map(i => q.options[i]).join(', ');
+            else correctText = q.acceptedAnswers[0].toUpperCase();
+
+            finalizeQuestionResult(false, "Waktu Habis", correctText, true);
+        }
+
+        function finalizeQuestionResult(isCorrect, userAnswer, correctAnswer, isTimeout = false) {
+            const q = quizQuestions[currentQuestionIndex];
+            const totalTime = q.time || 25;
+            const timeTaken = isTimeout ? totalTime : Math.max(1, totalTime - timeLeft);
+            const targetStreak = getBalancedStreakTarget();
+            let earnedPoints = 0;
+
+            if (isCorrect) {
+                correctCount++;
+                currentStreak++;
+                const speedBonus = Math.round((timeLeft / totalTime) * 400);
+                earnedPoints = 600 + speedBonus;
+                if (doubleScoreActiveThisQuestion) {
+                    earnedPoints *= 2;
+                }
+                score += earnedPoints;
+                document.getElementById('current-score').innerText = score;
+
+                // Hadiah item acak setiap mencapai target streak dinamis
+                const streakTarget = getStreakRewardTarget();
+                if (currentStreak >= streakTarget) {
+                    currentStreak = 0;
+                    const rolledId = rollWeightedPowerup();
+                    grantPowerupToInventory(rolledId, `Streak ${streakTarget} Benar`);
+                }
+            } else {
+                currentStreak = 0;
+            }
+            renderInventoryUI();
+
+            playerHistory.push({
+                questionIndex: currentQuestionIndex,
+                question: q.question,
+                category: q.category,
+                userAnswer: userAnswer,
+                correctAnswer: correctAnswer,
+                isCorrect: isCorrect,
+                timeTaken: timeTaken,
+                maxTime: totalTime,
+                pointsEarned: earnedPoints,
+                explanation: q.explanation
+            });
+
+            const fbBox = document.getElementById('feedback-box');
+            const fbIcon = document.getElementById('feedback-icon');
+            const fbTitle = document.getElementById('feedback-title');
+            const fbPoints = document.getElementById('feedback-points');
+            const fbExp = document.getElementById('feedback-explanation');
+
+            fbBox.classList.remove('hidden', 'bg-emerald-500/20', 'border-emerald-400/50', 'bg-rose-500/20', 'border-rose-400/50');
+
+            if (isCorrect) {
+                fbBox.classList.add('bg-emerald-500/20', 'border-emerald-400/50');
+                fbIcon.className = "w-8 h-8 rounded-full bg-emerald-400 text-slate-950 flex items-center justify-center font-bold text-lg";
+                fbIcon.innerHTML = '<i class="fa-solid fa-check"></i>';
+                fbTitle.innerText = "Jawaban Benar!";
+                fbTitle.className = "font-extrabold text-lg text-emerald-300";
+                fbPoints.innerText = `+${earnedPoints} poin`;
+            } else {
+                fbBox.classList.add('bg-rose-500/20', 'border-rose-400/50');
+                fbIcon.className = "w-8 h-8 rounded-full bg-rose-500 text-white flex items-center justify-center font-bold text-lg";
+                fbIcon.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+                fbTitle.innerText = isTimeout ? "Waktu Habis!" : `Kurang Tepat (Jawaban: ${correctAnswer})`;
+                fbTitle.className = "font-extrabold text-lg text-rose-300";
+                fbPoints.innerText = "+0 poin";
+            }
+
+            fbExp.innerText = q.explanation;
+        }
+
+        function nextQuestion() {
+            currentQuestionIndex++;
+            if (currentQuestionIndex < quizQuestions.length) {
+                loadQuestion();
+            } else {
+                finishQuiz();
+            }
+        }
+
+        function finishQuiz() {
+            document.getElementById('screen-quiz').classList.add('hidden');
+            document.getElementById('screen-leaderboard').classList.remove('hidden');
+
+            if (typeof window.unregisterActivePlayerCloud === 'function') {
+                window.unregisterActivePlayerCloud(DEVICE_ID);
+            }
+
+            const totalQ = quizQuestions.length;
+            const record = {
+                id: DEVICE_ID,
+                deviceId: DEVICE_ID,
+                name: currentPlayerName,
+                score: score,
+                correct: correctCount,
+                totalQuestions: totalQ,
+                history: playerHistory,
+                completedAt: new Date().toISOString()
+            };
+
+            safeSetStorage('quiz_completed_record_' + DEVICE_ID, JSON.stringify(record));
+            applyDeviceLockUI(record);
+
+            document.getElementById('player-result-card').classList.remove('hidden');
+            document.getElementById('result-player-name').innerText = currentPlayerName;
+            document.getElementById('result-correct-count').innerText = `${correctCount}/${totalQ}`;
+            document.getElementById('result-total-score').innerText = score;
+
+            renderAnswerReview();
+
+            if (typeof window.saveScoreToCloud === 'function') {
+                window.saveScoreToCloud(record);
+            } else {
+                upsertLocalLeaderboard(record);
+            }
+        }
+
+        function renderAnswerReview() {
+            const section = document.getElementById('answer-review-section');
+            const list = document.getElementById('answer-review-list');
+            section.classList.remove('hidden');
+            list.innerHTML = '';
+
+            playerHistory.forEach((item, idx) => {
+                const card = document.createElement('div');
+                card.className = `p-4 rounded-2xl border ${item.isCorrect ? 'bg-emerald-500/10 border-emerald-400/30' : 'bg-rose-500/10 border-rose-400/30'}`;
+                card.innerHTML = `
+                    <div class="flex items-start justify-between gap-2 mb-1.5">
+                        <span class="text-xs font-bold uppercase tracking-wider ${item.isCorrect ? 'text-emerald-300' : 'text-rose-300'}">
+                            Soal ${idx + 1} • ${item.isCorrect ? 'Benar' : 'Salah'}
+                        </span>
+                        <span class="text-xs text-purple-200">${escapeHtml(item.category)}</span>
+                    </div>
+                    <p class="font-bold text-sm text-white mb-2">${escapeHtml(item.question)}</p>
+                    <div class="text-xs space-y-1 mb-2">
+                        <div class="${item.isCorrect ? 'text-emerald-300' : 'text-rose-300'}">
+                            <strong>Jawabanmu:</strong> ${escapeHtml(item.userAnswer)}
+                        </div>
+                        ${!item.isCorrect ? `<div class="text-emerald-300"><strong>Kunci Jawaban:</strong> ${escapeHtml(item.correctAnswer)}</div>` : ''}
+                    </div>
+                    <p class="text-xs text-purple-200/90 bg-black/20 p-2.5 rounded-xl">${escapeHtml(item.explanation)}</p>
+                `;
+                list.appendChild(card);
+            });
+        }
+
+        function showLeaderboardOnly() {
+            document.getElementById('screen-start').classList.add('hidden');
+            document.getElementById('screen-quiz').classList.add('hidden');
+            document.getElementById('screen-leaderboard').classList.remove('hidden');
+
+            if (savedPlayerRecord && savedPlayerRecord.history) {
+                playerHistory = savedPlayerRecord.history;
+                document.getElementById('player-result-card').classList.remove('hidden');
+                document.getElementById('result-player-name').innerText = savedPlayerRecord.name;
+                document.getElementById('result-correct-count').innerText = `${savedPlayerRecord.correct}/${savedPlayerRecord.totalQuestions || quizQuestions.length}`;
+                document.getElementById('result-total-score').innerText = savedPlayerRecord.score;
+                renderAnswerReview();
+            }
+            renderLeaderboardList(globalLeaderboardData);
+        }
+
+        function backToLockedLobby() {
+            document.getElementById('screen-leaderboard').classList.add('hidden');
+            document.getElementById('screen-start').classList.remove('hidden');
+        }
+
+        function upsertLocalLeaderboard(record) {
+            const idx = globalLeaderboardData.findIndex(p => p.deviceId === record.deviceId);
+            if (idx >= 0) globalLeaderboardData[idx] = record;
+            else globalLeaderboardData.push(record);
+            renderLeaderboardList(globalLeaderboardData);
+        }
+
+        function renderLeaderboardList(data) {
+            globalLeaderboardData = [...data].sort((a, b) => (b.score || 0) - (a.score || 0));
+            applySessionModeUI();
+            const container = document.getElementById('leaderboard-list');
+            const lobbyLbBtn = document.getElementById('btn-lobby-leaderboard');
+
+            if (globalLeaderboardData.length > 0 && lobbyLbBtn) {
+                lobbyLbBtn.classList.remove('hidden');
+            } else if (lobbyLbBtn && !hasPlayedThisDevice) {
+                lobbyLbBtn.classList.add('hidden');
+            }
+
+            if (!container) return;
+            if (globalLeaderboardData.length === 0) {
+                container.innerHTML = `<div class="p-8 text-center text-sm text-purple-200">Belum ada peserta yang menyelesaikan kuis.</div>`;
+                return;
+            }
+
+            container.innerHTML = '';
+            globalLeaderboardData.forEach((player, index) => {
+                const rank = index + 1;
+                const isMe = (player.deviceId === DEVICE_ID);
+                let rankBadge = `<span class="font-bold text-purple-200">#${rank}</span>`;
+                if (rank === 1) rankBadge = `<span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-400 text-slate-950 font-extrabold text-xs"><i class="fa-solid fa-crown"></i></span>`;
+                else if (rank === 2) rankBadge = `<span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-slate-300 text-slate-950 font-extrabold text-xs">2</span>`;
+                else if (rank === 3) rankBadge = `<span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-700 text-white font-extrabold text-xs">3</span>`;
+
+                const row = document.createElement('div');
+                row.className = `grid grid-cols-12 items-center px-4 py-3.5 text-sm ${isMe ? 'bg-indigo-500/30 font-bold' : ''}`;
+                row.innerHTML = `
+                    <div class="col-span-2 text-center">${rankBadge}</div>
+                    <div class="col-span-5 truncate pr-2 flex items-center gap-2">
+                        <span class="truncate">${escapeHtml(player.name)}</span>
+                        ${isMe ? '<span class="text-[10px] uppercase bg-amber-400 text-slate-950 px-1.5 py-0.5 rounded font-extrabold shrink-0">Kamu</span>' : ''}
+                    </div>
+                    <div class="col-span-2 text-center text-emerald-300 font-semibold">${player.correct}/${player.totalQuestions || quizQuestions.length}</div>
+                    <div class="col-span-3 text-right font-extrabold text-amber-400">${player.score}</div>
+                `;
+                container.appendChild(row);
+            });
+        }
+
+        function manualRefreshLeaderboard(btn) {
+            const icon = btn.querySelector('i');
+            if (icon) icon.classList.add('fa-spin');
+            if (typeof window.fetchCloudLeaderboardOnce === 'function') {
+                window.fetchCloudLeaderboardOnce().finally(() => {
+                    setTimeout(() => { if (icon) icon.classList.remove('fa-spin'); }, 500);
+                });
+            } else {
+                renderLeaderboardList(globalLeaderboardData);
+                setTimeout(() => { if (icon) icon.classList.remove('fa-spin'); }, 500);
+            }
+        }
+
+        // ==========================================
+        // PANEL ADMIN, DELETE 1 PESERTA & CRUD SOAL
+        // ==========================================
+        function openAdminModal() {
+            document.getElementById('admin-pin-input').value = '';
+            document.getElementById('admin-pin-error').classList.add('hidden');
+            document.getElementById('modal-admin-login').classList.remove('hidden');
+            setTimeout(() => document.getElementById('admin-pin-input').focus(), 50);
+        }
+
+        function closeAdminModal() {
+            document.getElementById('modal-admin-login').classList.add('hidden');
+        }
+
+        function verifyAdminPin() {
+            const pin = document.getElementById('admin-pin-input').value.trim();
+            if (pin === ADMIN_PIN) {
+                closeAdminModal();
+                openAdminDashboard();
+            } else {
+                document.getElementById('admin-pin-error').classList.remove('hidden');
+            }
+        }
+
+        document.getElementById('admin-pin-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') verifyAdminPin();
+        });
+
+        function openAdminDashboard() {
+            document.getElementById('screen-start').classList.add('hidden');
+            document.getElementById('screen-waiting-room').classList.add('hidden');
+            document.getElementById('screen-quiz').classList.add('hidden');
+            document.getElementById('screen-leaderboard').classList.add('hidden');
+            document.getElementById('screen-admin').classList.remove('hidden');
+            applySessionModeUI();
+            renderWaitingPlayersUI();
+            renderAdminStatistics();
+            renderAdminCrudQuestions();
+        }
+
+        function closeAdminDashboard() {
+            document.getElementById('screen-admin').classList.add('hidden');
+            document.getElementById('screen-start').classList.remove('hidden');
+            updateLobbyCategoryStats();
+        }
+
+        function renderAdminStatistics() {
+            const total = globalLeaderboardData.length;
+            document.getElementById('stat-total-players').innerText = total;
+
+            if (total === 0) {
+                document.getElementById('stat-avg-score').innerText = '0';
+                document.getElementById('stat-max-score').innerText = '0';
+                document.getElementById('stat-avg-correct').innerText = '0%';
+            } else {
+                const sumScore = globalLeaderboardData.reduce((acc, p) => acc + (p.score || 0), 0);
+                const maxScore = Math.max(...globalLeaderboardData.map(p => p.score || 0));
+                const avgPct = Math.round(globalLeaderboardData.reduce((acc, p) => acc + ((p.correct || 0) / (p.totalQuestions || quizQuestions.length) * 100), 0) / total);
+
+                document.getElementById('stat-avg-score').innerText = Math.round(sumScore / total);
+                document.getElementById('stat-max-score').innerText = maxScore;
+                document.getElementById('stat-avg-correct').innerText = `${avgPct}%`;
+            }
+
+            // Statistik Ketepatan Per Soal
+            const qStatsContainer = document.getElementById('admin-question-stats');
+            qStatsContainer.innerHTML = '';
+            quizQuestions.forEach((q, idx) => {
+                let answeredCount = 0;
+                let correctTimes = 0;
+                globalLeaderboardData.forEach(p => {
+                    if (Array.isArray(p.history) && p.history[idx]) {
+                        answeredCount++;
+                        if (p.history[idx].isCorrect) correctTimes++;
+                    }
+                });
+                const pct = answeredCount > 0 ? Math.round((correctTimes / answeredCount) * 100) : 0;
+                const card = document.createElement('div');
+                card.className = "bg-slate-950/50 border border-white/10 rounded-xl p-3";
+                card.innerHTML = `
+                    <div class="flex justify-between text-xs font-bold mb-1">
+                        <span class="text-purple-200">Soal ${idx + 1} (${escapeHtml(q.category)})</span>
+                        <span class="text-emerald-400">${pct}% Benar (${correctTimes}/${answeredCount})</span>
+                    </div>
+                    <p class="text-xs text-white truncate mb-2">${escapeHtml(q.question)}</p>
+                    <div class="w-full bg-white/10 h-2 rounded-full overflow-hidden">
+                        <div class="bg-emerald-400 h-full" style="width: ${pct}%"></div>
+                    </div>
+                `;
+                qStatsContainer.appendChild(card);
+            });
+
+            // Tabel Lengkap Peserta
+            const tbody = document.getElementById('admin-participants-table');
+            tbody.innerHTML = '';
+            if (total === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" class="py-6 text-center text-purple-200">Belum ada data peserta.</td></tr>`;
+                return;
+            }
+            globalLeaderboardData.forEach((p, idx) => {
+                const dateStr = p.completedAt ? new Date(p.completedAt).toLocaleString('id-ID') : '-';
+                const wrongNums = Array.isArray(p.history)
+                    ? p.history.map((h, i) => (!h.isCorrect ? `#${i + 1}` : null)).filter(Boolean)
+                    : [];
+                const wrongBadge = wrongNums.length > 0
+                    ? `<span class="text-[10px] text-rose-300 block mt-0.5">Salah: ${wrongNums.join(', ')}</span>`
+                    : `<span class="text-[10px] text-emerald-300 block mt-0.5">Sempurna!</span>`;
+
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-white/5 transition";
+                tr.innerHTML = `
+                    <td class="py-3 px-4 font-bold">#${idx + 1}</td>
+                    <td class="py-3 px-4">
+                        <div class="font-bold text-white">${escapeHtml(p.name)}</div>
+                        ${wrongBadge}
+                    </td>
+                    <td class="py-3 px-4 text-center text-emerald-400 font-bold">${p.correct}/${p.totalQuestions || quizQuestions.length}</td>
+                    <td class="py-3 px-4 text-right font-extrabold text-amber-400">${p.score}</td>
+                    <td class="py-3 px-4 text-xs text-purple-200">${dateStr}</td>
+                    <td class="py-3 px-4 text-center">
+                        <div class="inline-flex items-center gap-1.5">
+                            <button onclick="openPlayerDetailModal(${idx})" title="Lihat Detail Jawaban" class="bg-indigo-500/30 hover:bg-indigo-500/50 text-indigo-200 border border-indigo-400/40 text-xs font-bold px-2.5 py-1.5 rounded-lg transition inline-flex items-center gap-1 cursor-pointer">
+                                <i class="fa-solid fa-magnifying-glass-chart"></i> Detail
+                            </button>
+                            <button onclick="confirmDeleteSingleParticipant(${idx})" title="Hapus / Reset Peserta Ini" class="bg-rose-500/25 hover:bg-rose-500/45 text-rose-200 border border-rose-400/40 text-xs font-bold px-2.5 py-1.5 rounded-lg transition inline-flex items-center gap-1 cursor-pointer">
+                                <i class="fa-solid fa-trash"></i> Hapus
+                            </button>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function confirmDeleteSingleParticipant(playerIdx) {
+            const player = globalLeaderboardData[playerIdx];
+            if (!player) return;
+            pendingDeleteTarget = player;
+            const desc = document.getElementById('delete-one-desc');
+            if (desc) {
+                desc.innerHTML = `Skor milik <strong>${escapeHtml(player.name)}</strong> (${player.score} poin) akan dihapus dari Leaderboard dan perangkatnya diizinkan bermain lagi.`;
+            }
+            document.getElementById('modal-confirm-delete-one').classList.remove('hidden');
+        }
+
+        function executeDeleteSingleParticipant() {
+            document.getElementById('modal-confirm-delete-one').classList.add('hidden');
+            if (!pendingDeleteTarget) return;
+            const targetId = pendingDeleteTarget.deviceId || pendingDeleteTarget.id;
+            const targetName = pendingDeleteTarget.name || 'Peserta';
+            pendingDeleteTarget = null;
+
+            globalLeaderboardData = globalLeaderboardData.filter(p => (p.deviceId || p.id) !== targetId);
+            if (targetId === DEVICE_ID) {
+                unlockThisDeviceUI();
+            }
+
+            renderLeaderboardList(globalLeaderboardData);
+            renderAdminStatistics();
+
+            if (typeof window.deleteSingleParticipantFromCloud === 'function' && targetId) {
+                window.deleteSingleParticipantFromCloud(targetId);
+            }
+            showToast(`Data & kunci perangkat untuk ${targetName} berhasil dihapus.`);
+        }
+
+        function openPlayerDetailModal(playerIdx) {
+            const player = globalLeaderboardData[playerIdx];
+            if (!player) return;
+
+            document.getElementById('detail-player-name').innerText = player.name || 'Peserta';
+            const dateStr = player.completedAt ? new Date(player.completedAt).toLocaleString('id-ID') : '-';
+            document.getElementById('detail-player-meta').innerText = `ID: ${player.deviceId || '-'} • Selesai: ${dateStr}`;
+
+            const totalQ = player.totalQuestions || (Array.isArray(player.history) ? player.history.length : quizQuestions.length);
+            document.getElementById('detail-stat-score').innerText = player.score || 0;
+            document.getElementById('detail-stat-accuracy').innerText = `${player.correct || 0}/${totalQ}`;
+
+            const history = Array.isArray(player.history) ? player.history : [];
+            let totalDuration = 0;
+            let fastestItem = null;
+            let fastestNum = null;
+            const wrongItems = [];
+
+            history.forEach((h, i) => {
+                const dur = typeof h.timeTaken === 'number' ? h.timeTaken : null;
+                if (dur !== null) {
+                    totalDuration += dur;
+                    if (!fastestItem || dur < fastestItem.timeTaken) {
+                        fastestItem = h;
+                        fastestNum = i + 1;
+                    }
+                }
+                if (!h.isCorrect) {
+                    wrongItems.push({ num: i + 1, ...h });
+                }
+            });
+
+            document.getElementById('detail-stat-fastest').innerText = fastestItem
+                ? `Soal #${fastestNum} (${fastestItem.timeTaken}d)`
+                : '-';
+            document.getElementById('detail-stat-totaltime').innerText = totalDuration > 0 ? `${totalDuration} detik` : '-';
+
+            const wrongSummaryEl = document.getElementById('detail-wrong-summary');
+            if (history.length === 0) {
+                wrongSummaryEl.className = "mb-4 p-3.5 rounded-2xl bg-white/10 border border-white/15 text-xs text-purple-200";
+                wrongSummaryEl.innerHTML = `<i class="fa-solid fa-circle-info mr-1.5"></i>Riwayat jawaban detail belum tersedia untuk sesi ini.`;
+            } else if (wrongItems.length === 0) {
+                wrongSummaryEl.className = "mb-4 p-3.5 rounded-2xl bg-emerald-500/15 border border-emerald-400/30 text-xs text-emerald-200 font-semibold";
+                wrongSummaryEl.innerHTML = `<i class="fa-solid fa-circle-check mr-1.5"></i>Luar biasa! Peserta menjawab seluruh soal dengan benar tanpa kesalahan.`;
+            } else {
+                wrongSummaryEl.className = "mb-4 p-3.5 rounded-2xl bg-rose-500/15 border border-rose-400/30 text-xs text-rose-200";
+                const listNums = wrongItems.map(w => `<strong>Soal #${w.num}</strong>`).join(', ');
+                wrongSummaryEl.innerHTML = `<i class="fa-solid fa-circle-xmark mr-1.5"></i>Peserta melakukan <strong>${wrongItems.length} kesalahan</strong> pada: ${listNums}.`;
+            }
+
+            const breakdownEl = document.getElementById('detail-questions-breakdown');
+            breakdownEl.innerHTML = '';
+
+            history.forEach((h, i) => {
+                const isFastest = (fastestNum === i + 1 && typeof h.timeTaken === 'number');
+                const durBadge = typeof h.timeTaken === 'number'
+                    ? `<span class="text-[11px] font-bold px-2 py-0.5 rounded-md ${isFastest ? 'bg-sky-400 text-slate-950' : 'bg-white/10 text-purple-200'}">
+                        <i class="fa-regular fa-clock mr-1"></i>${h.timeTaken}d ${isFastest ? '• Tercepat!' : ''}
+                       </span>`
+                    : '';
+
+                const card = document.createElement('div');
+                card.className = `p-3.5 rounded-2xl border ${h.isCorrect ? 'bg-emerald-500/10 border-emerald-400/30' : 'bg-rose-500/10 border-rose-400/30'}`;
+                card.innerHTML = `
+                    <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs font-extrabold ${h.isCorrect ? 'text-emerald-300' : 'text-rose-300'}">
+                                Soal #${i + 1} • ${h.isCorrect ? 'BENAR' : 'SALAH'}
+                            </span>
+                            <span class="text-[11px] text-purple-300">(${escapeHtml(h.category || '')})</span>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            ${durBadge}
+                            ${typeof h.pointsEarned === 'number' ? `<span class="text-[11px] font-bold text-amber-300 bg-black/25 px-2 py-0.5 rounded-md">+${h.pointsEarned}</span>` : ''}
+                        </div>
+                    </div>
+                    <p class="text-xs sm:text-sm font-bold text-white mb-1.5">${escapeHtml(h.question)}</p>
+                    <div class="text-xs space-y-0.5">
+                        <div class="${h.isCorrect ? 'text-emerald-300' : 'text-rose-300'}">
+                            <strong>Jawaban Peserta:</strong> ${escapeHtml(h.userAnswer)}
+                        </div>
+                        ${!h.isCorrect ? `<div class="text-emerald-300"><strong>Jawaban Seharusnya:</strong> ${escapeHtml(h.correctAnswer)}</div>` : ''}
+                    </div>
+                `;
+                breakdownEl.appendChild(card);
+            });
+
+            document.getElementById('modal-player-detail').classList.remove('hidden');
+        }
+
+        function closePlayerDetailModal() {
+            document.getElementById('modal-player-detail').classList.add('hidden');
+        }
+
+        function renderAdminCrudQuestions() {
+            const list = document.getElementById('admin-crud-questions-list');
+            list.innerHTML = '';
+            quizQuestions.forEach((q, idx) => {
+                const row = document.createElement('div');
+                row.className = "bg-slate-900/80 border border-white/10 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3";
+                row.innerHTML = `
+                    <div class="space-y-1">
+                        <div class="flex items-center gap-2 text-[11px] font-bold">
+                            <span class="bg-indigo-500/30 text-indigo-200 px-2 py-0.5 rounded">#${idx + 1}</span>
+                            <span class="text-amber-300">${escapeHtml(q.category)}</span>
+                            <span class="text-purple-300">• ${q.type} (${q.time}d)</span>
+                        </div>
+                        <p class="text-xs sm:text-sm font-bold text-white">${escapeHtml(q.question)}</p>
+                    </div>
+                    <div class="flex items-center gap-2 shrink-0">
+                        <button onclick="openQuestionEditorModal(${idx})" class="bg-amber-400/20 hover:bg-amber-400/30 text-amber-300 border border-amber-400/30 text-xs font-bold px-3 py-1.5 rounded-lg transition cursor-pointer">
+                            <i class="fa-solid fa-pen"></i> Edit
+                        </button>
+                        <button onclick="deleteCrudQuestion(${idx})" class="bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-400/30 text-xs font-bold px-3 py-1.5 rounded-lg transition cursor-pointer">
+                            <i class="fa-solid fa-trash"></i> Hapus
+                        </button>
+                    </div>
+                `;
+                list.appendChild(row);
+            });
+        }
+
+        function toggleCrudTypeFields() {
+            const type = document.getElementById('crud-type').value;
+            document.getElementById('crud-options-group').classList.toggle('hidden', type === 'TF' || type === 'TEXT');
+            document.getElementById('crud-answer-mc-group').classList.toggle('hidden', type !== 'MC');
+            document.getElementById('crud-answer-tf-group').classList.toggle('hidden', type !== 'TF');
+            document.getElementById('crud-answer-ms-group').classList.toggle('hidden', type !== 'MS');
+            document.getElementById('crud-answer-text-group').classList.toggle('hidden', type !== 'TEXT');
+        }
+
+        function openQuestionEditorModal(editIdx = -1) {
+            document.getElementById('crud-edit-index').value = editIdx;
+            document.getElementById('crud-form-error').classList.add('hidden');
+            document.querySelectorAll('.crud-ms-check').forEach(cb => cb.checked = false);
+
+            if (editIdx >= 0 && quizQuestions[editIdx]) {
+                const q = quizQuestions[editIdx];
+                document.getElementById('crud-modal-title').innerText = `Edit Soal #${editIdx + 1}`;
+                document.getElementById('crud-category').value = q.category;
+                document.getElementById('crud-type').value = q.type;
+                document.getElementById('crud-time').value = q.time || 25;
+                document.getElementById('crud-question').value = q.question;
+                document.getElementById('crud-explanation').value = q.explanation || '';
+
+                if (q.type === 'MC' || q.type === 'MS') {
+                    for (let i = 0; i < 4; i++) {
+                        document.getElementById(`crud-opt-${i}`).value = (q.options && q.options[i]) || '';
+                    }
+                }
+                if (q.type === 'MC') {
+                    document.getElementById('crud-answer-mc').value = String(q.answer);
+                } else if (q.type === 'TF') {
+                    document.getElementById('crud-answer-tf').value = String(q.answer);
+                } else if (q.type === 'MS') {
+                    (q.answer || []).forEach(ansIdx => {
+                        const cb = document.querySelector(`.crud-ms-check[value="${ansIdx}"]`);
+                        if (cb) cb.checked = true;
+                    });
+                } else if (q.type === 'TEXT') {
+                    document.getElementById('crud-answer-text').value = (q.acceptedAnswers || []).join(', ');
+                }
+            } else {
+                document.getElementById('crud-modal-title').innerText = "Tambah Soal Baru";
+                document.getElementById('crud-category').value = "Manusia & Hewan";
+                document.getElementById('crud-type').value = "MC";
+                document.getElementById('crud-time').value = 25;
+                document.getElementById('crud-question').value = '';
+                document.getElementById('crud-explanation').value = '';
+                for (let i = 0; i < 4; i++) document.getElementById(`crud-opt-${i}`).value = '';
+                document.getElementById('crud-answer-text').value = '';
+            }
+
+            toggleCrudTypeFields();
+            document.getElementById('modal-crud-question').classList.remove('hidden');
+        }
+
+        function closeQuestionEditorModal() {
+            document.getElementById('modal-crud-question').classList.add('hidden');
+        }
+
+        function saveCrudQuestion() {
+            const editIdx = parseInt(document.getElementById('crud-edit-index').value, 10);
+            const category = document.getElementById('crud-category').value;
+            const type = document.getElementById('crud-type').value;
+            const time = parseInt(document.getElementById('crud-time').value, 10) || 25;
+            const question = document.getElementById('crud-question').value.trim();
+            const explanation = document.getElementById('crud-explanation').value.trim() || "Jawaban sesuai kunci yang ditetapkan admin.";
+            const errEl = document.getElementById('crud-form-error');
+
+            if (!question) {
+                errEl.innerText = "Teks pertanyaan wajib diisi!";
+                errEl.classList.remove('hidden');
+                return;
+            }
+
+            let newObj = { category, type, time, question, explanation };
+
+            if (type === 'MC') {
+                const opts = [0, 1, 2, 3].map(i => document.getElementById(`crud-opt-${i}`).value.trim());
+                if (opts.some(o => !o)) {
+                    errEl.innerText = "Keempat opsi jawaban A–D wajib diisi!";
+                    errEl.classList.remove('hidden');
+                    return;
+                }
+                newObj.options = opts;
+                newObj.answer = parseInt(document.getElementById('crud-answer-mc').value, 10);
+            } else if (type === 'TF') {
+                newObj.options = ["Benar (True)", "Salah (False)"];
+                newObj.answer = parseInt(document.getElementById('crud-answer-tf').value, 10);
+            } else if (type === 'MS') {
+                const opts = [0, 1, 2, 3].map(i => document.getElementById(`crud-opt-${i}`).value.trim());
+                const checked = Array.from(document.querySelectorAll('.crud-ms-check:checked')).map(cb => parseInt(cb.value, 10));
+                if (opts.some(o => !o) || checked.length === 0) {
+                    errEl.innerText = "Isi semua opsi A–D dan centang minimal 1 jawaban benar!";
+                    errEl.classList.remove('hidden');
+                    return;
+                }
+                newObj.options = opts;
+                newObj.answer = checked;
+            } else if (type === 'TEXT') {
+                const rawAns = document.getElementById('crud-answer-text').value.split(',').map(s => s.trim()).filter(Boolean);
+                if (rawAns.length === 0) {
+                    errEl.innerText = "Masukkan minimal 1 kata kunci jawaban!";
+                    errEl.classList.remove('hidden');
+                    return;
+                }
+                newObj.acceptedAnswers = rawAns;
+            }
+
+            if (editIdx >= 0) quizQuestions[editIdx] = newObj;
+            else quizQuestions.push(newObj);
+
+            syncQuestionsStorageAndCloud();
+            closeQuestionEditorModal();
+            renderAdminCrudQuestions();
+            renderAdminStatistics();
+        }
+
+        function deleteCrudQuestion(idx) {
+            if (quizQuestions.length <= 1) {
+                showToast("Minimal harus tersisa 1 soal di dalam kuis!");
+                return;
+            }
+            quizQuestions.splice(idx, 1);
+            syncQuestionsStorageAndCloud();
+            renderAdminCrudQuestions();
+            renderAdminStatistics();
+            showToast("Soal berhasil dihapus.");
+        }
+
+        function syncQuestionsStorageAndCloud() {
+            safeSetStorage('quiz_custom_questions_v2', JSON.stringify(quizQuestions));
+            updateLobbyCategoryStats();
+            if (typeof window.saveQuestionsToCloud === 'function') {
+                window.saveQuestionsToCloud(quizQuestions);
+            }
+        }
+
+        function resetToDefault30Questions() {
+            quizQuestions = [...DEFAULT_QUESTIONS];
+            syncQuestionsStorageAndCloud();
+            renderAdminCrudQuestions();
+            renderAdminStatistics();
+            showToast("30 soal baru berhasil dimuat & disinkronkan ke Cloud!");
+        }
+
+        function confirmResetLeaderboard() {
+            document.getElementById('modal-confirm-reset').classList.remove('hidden');
+        }
+
+        function executeResetLeaderboard() {
+            document.getElementById('modal-confirm-reset').classList.add('hidden');
+            unlockThisDeviceUI();
+            globalLeaderboardData = [];
+
+            renderLeaderboardList([]);
+            renderAdminStatistics();
+
+            if (typeof window.resetCloudLeaderboard === 'function') {
+                window.resetCloudLeaderboard();
+            }
+            showToast("Seluruh skor peserta & kunci perangkat berhasil direset.");
+        }
+
+        function exportAdminCSV() {
+            const headers = ["Rank", "Nama Peserta", "Benar", "Total Soal", "Skor", "Soal Salah", "Soal Tercepat", "Total Waktu (Detik)", "Waktu Selesai", "ID Perangkat"];
+            const rows = globalLeaderboardData.map((p, idx) => {
+                const hist = Array.isArray(p.history) ? p.history : [];
+                const wrongList = hist.map((h, i) => (!h.isCorrect ? `No.${i + 1}` : null)).filter(Boolean).join('; ') || 'Tidak ada';
+                let totalSec = 0;
+                let fastStr = '-';
+                let minSec = Infinity;
+                hist.forEach((h, i) => {
+                    if (typeof h.timeTaken === 'number') {
+                        totalSec += h.timeTaken;
+                        if (h.timeTaken < minSec) {
+                            minSec = h.timeTaken;
+                            fastStr = `No.${i + 1} (${h.timeTaken}d)`;
+                        }
+                    }
+                });
+
+                return [
+                    idx + 1,
+                    `"${(p.name || '').replace(/"/g, '""')}"`,
+                    p.correct || 0,
+                    p.totalQuestions || quizQuestions.length,
+                    p.score || 0,
+                    `"${wrongList}"`,
+                    `"${fastStr}"`,
+                    totalSec || '-',
+                    `"${p.completedAt ? new Date(p.completedAt).toLocaleString('id-ID') : '-'}"`,
+                    `"${p.deviceId || '-'}"`
+                ];
+            });
+
+            const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `hasil_kuis_nusantara_${new Date().toISOString().slice(0,10)}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        function escapeHtml(str) {
+            if (typeof str !== 'string') return str;
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+
+        // Inisialisasi Awal UI
+        updateLobbyCategoryStats();
+        checkLocalLockState();
+        applySessionModeUI();
+    </script>
+
+    <!-- ========================================== -->
+    <!-- KONEKSI FIREBASE CLOUD (PROYEK: quizmrng)  -->
+    <!-- ========================================== -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, deleteDoc, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDc4enJaM3x9wFIWbIv7HSMJocCggAkP7E",
+            authDomain: "quizmrng.firebaseapp.com",
+            projectId: "quizmrng",
+            storageBucket: "quizmrng.firebasestorage.app",
+            messagingSenderId: "110916327233",
+            appId: "1:110916327233:web:54f4b5abb6730f2de173c0",
+            measurementId: "G-BZHTSHPJLN"
+        };
+
+        const appId = 'quizmrng-public-v1';
+        let db = null;
+
+        function setCloudBadge(status, text) {
+            const dot = document.getElementById('cloud-status-dot');
+            const label = document.getElementById('cloud-status-text');
+            if (!dot || !label) return;
+            label.innerText = text;
+            dot.className = "w-2 h-2 rounded-full " + (
+                status === 'ok' ? "bg-emerald-400" :
+                status === 'err' ? "bg-rose-500" : "bg-amber-400 animate-pulse"
+            );
+        }
+
+        async function initFirebaseSync() {
+            try {
+                const app = initializeApp(firebaseConfig);
+                const auth = getAuth(app);
+                db = getFirestore(app);
+
+                try {
+                    await signInAnonymously(auth);
+                } catch (authErr) {
+                    console.warn("Auth anonim dilewati:", authErr.code || authErr.message);
+                }
+
+                // 1. Dengarkan Perubahan Leaderboard Real-Time & Status Kunci Perangkat
+                const lbCol = collection(db, 'artifacts', appId, 'public', 'data', 'leaderboard');
+                onSnapshot(lbCol, (snapshot) => {
+                    setCloudBadge('ok', 'Cloud Terhubung');
+                    const list = [];
+                    let foundThisDeviceInCloud = false;
+                    snapshot.forEach((docSnap) => {
+                        const data = docSnap.data();
+                        list.push(data);
+                        if (data.deviceId === DEVICE_ID) {
+                            foundThisDeviceInCloud = true;
+                            safeSetStorage('quiz_completed_record_' + DEVICE_ID, JSON.stringify(data));
+                            applyDeviceLockUI(data);
+                        }
+                    });
+                    // Jika Admin menghapus peserta ini di cloud, buka kembali kunci perangkatnya
+                    if (!foundThisDeviceInCloud && hasPlayedThisDevice) {
+                        unlockThisDeviceUI();
+                    }
+                    renderLeaderboardList(list);
+                    if (!document.getElementById('screen-admin').classList.contains('hidden')) {
+                        renderAdminStatistics();
+                    }
+                }, (err) => {
+                    console.error("Firestore permission/listener error:", err);
+                    setCloudBadge('err', 'Cek Rules Firestore!');
+                });
+
+                // 2. Dengarkan Perubahan Bank Soal CRUD dari Admin
+                const configDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'questions_v2');
+                onSnapshot(configDocRef, (docSnap) => {
+                    if (docSnap.exists() && Array.isArray(docSnap.data().items) && docSnap.data().items.length > 0) {
+                        quizQuestions = docSnap.data().items;
+                        safeSetStorage('quiz_custom_questions_v2', JSON.stringify(quizQuestions));
+                        updateLobbyCategoryStats();
+                        if (!document.getElementById('screen-admin').classList.contains('hidden')) {
+                            renderAdminCrudQuestions();
+                        }
+                    }
+                });
+
+                // 3. Dengarkan Status Sesi Live / Bebas dari Admin
+                const sessionDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'session');
+                onSnapshot(sessionDocRef, (docSnap) => {
+                    if (docSnap.exists()) {
+                        const s = docSnap.data();
+                        if (s && s.mode) {
+                            sessionMode = s.mode;
+                            liveSessionRunId = s.runId || 'default';
+                            applySessionModeUI();
+                        }
+                    }
+                });
+
+                // 4. Dengarkan Daftar Peserta di Ruang Tunggu Live
+                const waitCol = collection(db, 'artifacts', appId, 'public', 'data', 'waiting_room');
+                onSnapshot(waitCol, (snapshot) => {
+                    const wList = [];
+                    snapshot.forEach(d => wList.push(d.data()));
+                    waitingRoomPlayers = wList.sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
+                    renderWaitingPlayersUI();
+                    applySessionModeUI();
+                });
+
+                // 4B. Dengarkan Peserta yang Sedang Mengerjakan Kuis (Untuk Penguncian Mode Bebas/Live)
+                const activeCol = collection(db, 'artifacts', appId, 'public', 'data', 'active_players');
+                onSnapshot(activeCol, (snapshot) => {
+                    const aList = [];
+                    snapshot.forEach(d => aList.push(d.data()));
+                    activeFreePlayers = aList;
+                    applySessionModeUI();
+                });
+
+                // 5. Dengarkan Sabotase / Debuff Real-Time untuk Perangkat Ini
+                const sabotageDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'sabotage', DEVICE_ID);
+                let lastHandledSabotageTs = 0;
+                onSnapshot(sabotageDocRef, (docSnap) => {
+                    if (docSnap.exists()) {
+                        const sData = docSnap.data();
+                        if (sData && sData.createdAt && sData.createdAt > lastHandledSabotageTs && (Date.now() - sData.createdAt < 15000)) {
+                            lastHandledSabotageTs = sData.createdAt;
+                            if (typeof window.handleIncomingSabotage === 'function') {
+                                window.handleIncomingSabotage(sData);
+                            }
+                        }
+                    }
+                });
+
+            } catch (error) {
+                console.error("Gagal inisialisasi Firebase:", error);
+                setCloudBadge('err', 'Offline / Gagal Konek');
+            }
+        }
+
+        window.saveSessionStateToCloud = async function(sessionPayload) {
+            if (!db) return;
+            try {
+                const sessionDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'session');
+                await setDoc(sessionDocRef, sessionPayload);
+            } catch (e) {
+                console.error("Gagal menyimpan status sesi:", e);
+            }
+        };
+
+        window.joinWaitingRoomCloud = async function(playerPayload) {
+            if (!db) return;
+            try {
+                const wRef = doc(db, 'artifacts', appId, 'public', 'data', 'waiting_room', playerPayload.deviceId);
+                await setDoc(wRef, playerPayload);
+            } catch (e) {
+                console.error("Gagal masuk ruang tunggu:", e);
+            }
+        };
+
+        window.leaveWaitingRoomCloud = async function(devId) {
+            if (!db || !devId) return;
+            try {
+                const wRef = doc(db, 'artifacts', appId, 'public', 'data', 'waiting_room', devId);
+                await deleteDoc(wRef);
+            } catch (e) {}
+        };
+
+        window.registerActivePlayerCloud = async function(playerPayload) {
+            if (!db || !playerPayload.deviceId) return;
+            try {
+                const aRef = doc(db, 'artifacts', appId, 'public', 'data', 'active_players', playerPayload.deviceId);
+                await setDoc(aRef, playerPayload);
+            } catch (e) {}
+        };
+
+        window.unregisterActivePlayerCloud = async function(devId) {
+            if (!db || !devId) return;
+            try {
+                const aRef = doc(db, 'artifacts', appId, 'public', 'data', 'active_players', devId);
+                await deleteDoc(aRef);
+            } catch (e) {}
+        };
+
+        window.clearActiveSessionPlayersCloud = async function() {
+            if (!db) return;
+            try {
+                const activeCol = collection(db, 'artifacts', appId, 'public', 'data', 'active_players');
+                const snapA = await getDocs(activeCol);
+                const dels = [];
+                snapA.forEach(d => dels.push(deleteDoc(d.ref)));
+                const waitCol = collection(db, 'artifacts', appId, 'public', 'data', 'waiting_room');
+                const snapW = await getDocs(waitCol);
+                snapW.forEach(d => dels.push(deleteDoc(d.ref)));
+                await Promise.all(dels);
+            } catch (e) {}
+        };
+
+        window.saveScoreToCloud = async function(record) {
+            upsertLocalLeaderboard(record);
+            if (!db) return;
+            try {
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'leaderboard', record.deviceId);
+                await setDoc(docRef, record);
+                setCloudBadge('ok', 'Skor Tersimpan di Cloud');
+            } catch (e) {
+                console.error("Gagal menyimpan skor ke cloud:", e);
+                setCloudBadge('err', 'Gagal Simpan (Cek Rules)');
+                showToast("Gagal simpan ke Firebase: periksa tab Rules di Firestore!");
+            }
+        };
+
+        window.fetchCloudLeaderboardOnce = async function() {
+            if (!db) return;
+            try {
+                const lbCol = collection(db, 'artifacts', appId, 'public', 'data', 'leaderboard');
+                const snap = await getDocs(lbCol);
+                const list = [];
+                snap.forEach(d => list.push(d.data()));
+                renderLeaderboardList(list);
+                setCloudBadge('ok', 'Cloud Terhubung');
+            } catch (e) {
+                console.error("Gagal refresh leaderboard:", e);
+                setCloudBadge('err', 'Cek Rules Firestore!');
+            }
+        };
+
+        window.saveQuestionsToCloud = async function(questionsArray) {
+            if (!db) return;
+            try {
+                const configDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'questions_v2');
+                await setDoc(configDocRef, { items: questionsArray, updatedAt: new Date().toISOString() });
+            } catch (e) {
+                console.error("Gagal menyinkronkan soal CRUD ke cloud:", e);
+                showToast("Gagal menyimpan soal ke Firebase (cek Rules Firestore).");
+            }
+        };
+
+        window.sendSabotageToCloud = async function(sabotagePayload) {
+            if (!db || !sabotagePayload.targetDeviceId) return;
+            try {
+                const targetRef = doc(db, 'artifacts', appId, 'public', 'data', 'sabotage', sabotagePayload.targetDeviceId);
+                await setDoc(targetRef, sabotagePayload);
+            } catch (e) {
+                console.error("Gagal mengirim sabotase ke cloud:", e);
+            }
+        };
+
+        window.deleteSingleParticipantFromCloud = async function(targetDeviceId) {
+            if (!db || !targetDeviceId) return;
+            try {
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'leaderboard', targetDeviceId);
+                await deleteDoc(docRef);
+            } catch (e) {
+                console.error("Gagal menghapus peserta:", e);
+            }
+        };
+
+        window.resetCloudLeaderboard = async function() {
+            if (!db) return;
+            try {
+                const lbCol = collection(db, 'artifacts', appId, 'public', 'data', 'leaderboard');
+                const snap = await getDocs(lbCol);
+                const deletes = [];
+                snap.forEach(d => deletes.push(deleteDoc(d.ref)));
+                await Promise.all(deletes);
+            } catch (e) {
+                console.error("Gagal mereset leaderboard cloud:", e);
+            }
+        };
+
+        initFirebaseSync();
+    </script>
+</body>
+</html>
