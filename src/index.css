@@ -31,6 +31,52 @@
   }
 }
 
+/* Tactile Arcade Pop Button & Option Surfaces */
+.arcade-btn {
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.42);
+  transition: transform 0.12s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.12s cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 0.14s ease,
+    border-color 0.14s ease;
+  touch-action: manipulation;
+}
+
+.arcade-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 0 rgba(0, 0, 0, 0.48);
+}
+
+.arcade-btn:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.38);
+}
+
+.arcade-btn:disabled {
+  box-shadow: none;
+}
+
+.arcade-btn-amber {
+  box-shadow: 0 4px 0 #b45309;
+  transition: transform 0.12s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.12s cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 0.14s ease;
+  touch-action: manipulation;
+}
+
+.arcade-btn-amber:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 0 #b45309;
+}
+
+.arcade-btn-amber:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 #b45309;
+}
+
+.arcade-btn-amber:disabled {
+  box-shadow: none;
+}
+
 @keyframes glitchShake {
   0%,
   100% {
@@ -114,6 +160,35 @@
   }
 }
 
+@keyframes countdownPop {
+  0% {
+    transform: scale(0.55);
+    opacity: 0;
+  }
+  45% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes confettiFall {
+  0% {
+    transform: translateY(-10px) rotate(0deg) scale(0.8);
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(96px) rotate(260deg) scale(1);
+    opacity: 0;
+  }
+}
+
 .glitch-active {
   animation: glitchShake 0.35s ease-in-out 2;
 }
@@ -145,6 +220,14 @@
   animation: urgentTick 0.65s ease-in-out infinite;
 }
 
+.anim-countdown-pop {
+  animation: countdownPop 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.anim-confetti {
+  animation: confettiFall 1.9s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .glitch-active,
   .anim-hourglass-flip,
@@ -152,7 +235,15 @@
   .anim-radar-ping,
   .anim-flame-dance,
   .anim-float-gentle,
-  .anim-urgent-tick {
+  .anim-urgent-tick,
+  .anim-countdown-pop,
+  .anim-confetti {
     animation: none;
+  }
+  .arcade-btn:hover:not(:disabled),
+  .arcade-btn:active:not(:disabled),
+  .arcade-btn-amber:hover:not(:disabled),
+  .arcade-btn-amber:active:not(:disabled) {
+    transform: none;
   }
 }

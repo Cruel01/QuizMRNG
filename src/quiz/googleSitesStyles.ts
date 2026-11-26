@@ -1,0 +1,137 @@
+export const GOOGLE_SITES_HEAD_ASSETS = `  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kuis Interaktif Nusantara &amp; Trivia</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Outfit:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --font-display: 'Outfit', 'Plus Jakarta Sans', system-ui, sans-serif;
+      --font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
+      --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+    }
+    html, body {
+      overflow-x: hidden;
+      max-width: 100%;
+      font-family: var(--font-sans);
+      background-color: #0B1120;
+      color: #f1f5f9;
+      -webkit-tap-highlight-color: transparent;
+    }
+    h1, h2, h3, .font-display {
+      font-family: var(--font-display);
+      text-wrap: balance;
+    }
+    .font-mono-num, .tabular-num {
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+    }
+    .surface-card {
+      background-color: #131C31;
+      border: 1px solid #23304C;
+    }
+    .arcade-btn {
+      box-shadow: 0 4px 0 rgba(0, 0, 0, 0.42);
+      transition: transform 0.12s cubic-bezier(0.22, 1, 0.36, 1),
+        box-shadow 0.12s cubic-bezier(0.22, 1, 0.36, 1),
+        background-color 0.14s ease,
+        border-color 0.14s ease;
+      touch-action: manipulation;
+    }
+    .arcade-btn:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 0 rgba(0, 0, 0, 0.48);
+    }
+    .arcade-btn:active:not(:disabled) {
+      transform: translateY(2px);
+      box-shadow: 0 2px 0 rgba(0, 0, 0, 0.38);
+    }
+    .arcade-btn:disabled {
+      box-shadow: none;
+    }
+    .arcade-btn-amber {
+      box-shadow: 0 4px 0 #b45309;
+      transition: transform 0.12s cubic-bezier(0.22, 1, 0.36, 1),
+        box-shadow 0.12s cubic-bezier(0.22, 1, 0.36, 1),
+        background-color 0.14s ease;
+      touch-action: manipulation;
+    }
+    .arcade-btn-amber:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 0 #b45309;
+    }
+    .arcade-btn-amber:active:not(:disabled) {
+      transform: translateY(2px);
+      box-shadow: 0 2px 0 #b45309;
+    }
+    .arcade-btn-amber:disabled {
+      box-shadow: none;
+    }
+    @keyframes glitchShake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-4px); }
+      75% { transform: translateX(4px); }
+    }
+    @keyframes hourglassFlip {
+      0%, 55% { transform: rotate(0deg); }
+      75%, 100% { transform: rotate(180deg); }
+    }
+    @keyframes sandDrop {
+      0% { transform: translateY(-2px); opacity: 0; }
+      30% { opacity: 1; }
+      70% { transform: translateY(4px); opacity: 0.9; }
+      100% { transform: translateY(6px); opacity: 0; }
+    }
+    @keyframes radarPing {
+      0% { transform: scale(0.75); opacity: 0.7; }
+      100% { transform: scale(1.65); opacity: 0; }
+    }
+    @keyframes flameDance {
+      0%, 100% { transform: scale(1) rotate(-2deg); }
+      50% { transform: scale(1.1) rotate(3deg); }
+    }
+    @keyframes floatGentle {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-3px); }
+    }
+    @keyframes urgentTick {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.12); }
+    }
+    @keyframes countdownPop {
+      0% { transform: scale(0.55); opacity: 0; }
+      45% { transform: scale(1.1); opacity: 1; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    @keyframes confettiFall {
+      0% { transform: translateY(-10px) rotate(0deg) scale(0.8); opacity: 1; }
+      80% { opacity: 1; }
+      100% { transform: translateY(96px) rotate(260deg) scale(1); opacity: 0; }
+    }
+    @keyframes scorePop {
+      0% { opacity: 0; transform: translateY(6px) scale(0.85); }
+      35% { opacity: 1; transform: translateY(-18px) scale(1); }
+      80% { opacity: 1; transform: translateY(-20px) scale(1); }
+      100% { opacity: 0; transform: translateY(-26px) scale(0.95); }
+    }
+    .glitch-active { animation: glitchShake 0.35s ease-in-out 2; }
+    .anim-hourglass-flip { transform-origin: center; animation: hourglassFlip 2.8s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
+    .anim-hourglass-fast { transform-origin: center; animation: hourglassFlip 1.4s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
+    .anim-sand-drop { animation: sandDrop 1.4s ease-in infinite; }
+    .anim-radar-ping { transform-origin: center; animation: radarPing 2.2s cubic-bezier(0.16, 1, 0.3, 1) infinite; }
+    .anim-flame-dance { transform-origin: bottom center; animation: flameDance 1.1s ease-in-out infinite; }
+    .anim-float-gentle { animation: floatGentle 2.6s ease-in-out infinite; }
+    .anim-urgent-tick { animation: urgentTick 0.65s ease-in-out infinite; }
+    .anim-countdown-pop { animation: countdownPop 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+    .anim-confetti { animation: confettiFall 1.9s cubic-bezier(0.16, 1, 0.3, 1) infinite; }
+    .anim-score-pop { animation: scorePop 1.1s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+    @media (prefers-reduced-motion: reduce) {
+      .glitch-active, .anim-hourglass-flip, .anim-hourglass-fast, .anim-sand-drop, .anim-radar-ping,
+      .anim-flame-dance, .anim-float-gentle, .anim-urgent-tick, .anim-countdown-pop, .anim-confetti, .anim-score-pop {
+        animation: none;
+      }
+      .arcade-btn:hover:not(:disabled), .arcade-btn:active:not(:disabled),
+      .arcade-btn-amber:hover:not(:disabled), .arcade-btn-amber:active:not(:disabled) {
+        transform: none;
+      }
+    }
+  </style>`;

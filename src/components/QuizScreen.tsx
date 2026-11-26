@@ -1,8 +1,9 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   ArrowRight,
   Check,
+  ImageOff,
   Scissors,
   Shield,
   Shuffle,
@@ -14,7 +15,12 @@ import {
   Zap,
 } from 'lucide-react';
 import { POWERUP_CATALOG } from '../quiz/questions';
-import { getDebuffMilestones, getStreakRewardTarget } from '../quiz/engine';
+import {
+  getDebuffMilestones,
+  getStreakRewardTarget,
+  sanitizeImageUrl,
+} from '../quiz/engine';
+import { playPopClickFx } from '../quiz/soundFx';
 import type { PowerupId, Question } from '../quiz/types';
 import { AnimatedFlameIcon, SpinningHourglassIcon } from './AnimatedIcons';
 
@@ -34,6 +40,7 @@ interface QuizScreenProps {
   score: number;
   timeLeft: number;
   currentStreak: number;
+  compactMode: boolean;
   powerupInventory: (PowerupId | null)[];
   powerupUsedThisQuestion: boolean;
   doubleScoreActive: boolean;
@@ -80,6 +87,7 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
   score,
   timeLeft,
   currentStreak,
+  compactMode,
   powerupInventory,
   powerupUsedThisQuestion,
   doubleScoreActive,
@@ -104,6 +112,13 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
   onActivatePowerup,
 }) => {
   const textInputRef = useRef<HTMLInputElement | null>(null);
+  const [imgError, setImgError] = useState(false);
+
+  const safeImgUrl = sanitizeImageUrl(question.imageUrl);
+
+  useEffect(() => {
+    setImgError(false);
+  }, [questionIndex, safeImgUrl]);
 
   useEffect(() => {
     if (question.type === 'TEXT' && !feedback && !isFrozen) {
@@ -112,7 +127,10 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
     }
   }, [questionIndex, question.type, feedback, isFrozen]);
 
-  // Keyboard shortcuts: 1-4 / A-D for MC/TF options, Enter to continue after feedback
+  // Keyboard shortcuts:
+  // - MC / TF: 1-4 or A-D picks & submits immediately
+  // - MS: 1-4 or A-D toggles option; Enter submits when >= 1 selected
+  // - Feedback shown: Enter goes to next question
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (isFrozen) return;
@@ -133,17 +151,18 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
 
       if (isTyping) return;
 
+      const keyMap: Record<string, number> = {
+        '1': 0,
+        '2': 1,
+        '3': 2,
+        '4': 3,
+        a: 0,
+        b: 1,
+        c: 2,
+        d: 3,
+      };
+
       if (question.type === 'MC' || question.type === 'TF') {
-        const keyMap: Record<string, number> = {
-          '1': 0,
-          '2': 1,
-          '3': 2,
-          '4': 3,
-          a: 0,
-          b: 1,
-          c: 2,
-          d: 3,
-        };
         const dispIdx = keyMap[e.key.toLowerCase()];
         if (dispIdx !== undefined && dispIdx < optionOrder.length) {
           const origIdx = optionOrder[dispIdx];
@@ -151,6 +170,19 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
             e.preventDefault();
             onSelectSingle(origIdx);
           }
+        }
+      } else if (question.type === 'MS') {
+        const dispIdx = keyMap[e.key.toLowerCase()];
+        if (dispIdx !== undefined && dispIdx < optionOrder.length) {
+          const origIdx = optionOrder[dispIdx];
+          if (!eliminatedIndices.includes(origIdx)) {
+            e.preventDefault();
+            playPopClickFx();
+            onToggleMultiple(origIdx);
+          }
+        } else if (e.key === 'Enter' && selectedMultipleIndices.length > 0) {
+          e.preventDefault();
+          onSubmitComplex();
         }
       }
     };
@@ -163,8 +195,11 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
     isFrozen,
     onNextQuestion,
     onSelectSingle,
+    onSubmitComplex,
+    onToggleMultiple,
     optionOrder,
     question.type,
+    selectedMultipleIndices.length,
   ]);
 
   const totalTime = question.time || 25;
@@ -188,7 +223,10 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
       : [];
 
   return (
-    <section aria-label="Arena Kuis" className="space-y-3 sm:space-y-4">
+    <section
+      aria-label="Arena Kuis"
+      className={compactMode ? 'space-y-2.5' : 'space-y-3 sm:space-y-4'}
+    >
       {/* Top HUD Bar */}
       <div className="bg-[#131C31] border border-[#23304C] rounded-xl px-4 py-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-300 min-w-0">
@@ -272,12 +310,12 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
             onClick={onToggleMute}
             aria-label={isMuted ? 'Aktifkan suara efek' : 'Bisukan suara efek'}
             title={isMuted ? 'Aktifkan suara efek' : 'Bisukan suara efek'}
-            className="p-2 rounded-lg bg-[#0B1120] border border-[#23304C] text-slate-300 hover:text-white transition-colors cursor-pointer"
+            className="arcade-btn p-2 rounded-lg bg-[#0B1120] border border-[#23304C] text-slate-300 hover:text-white cursor-pointer"
           >
             {isMuted ? (
-              <VolumeX className="w-4 h-4" />
+              <VolumeX className="w-4 h-4 text-rose-400" />
             ) : (
-              <Volume2 className="w-4 h-4" />
+              <Volume2 className="w-4 h-4 text-emerald-400" />
             )}
           </button>
         </div>
@@ -315,6 +353,16 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
               />
               Streak {currentStreak}/{streakTarget}
             </span>
+            {currentStreak >= 2 && (
+              <motion.span
+                key={`combo-${currentStreak}`}
+                initial={{ scale: 0.75, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="font-mono-num font-extrabold text-[11px] text-emerald-400"
+              >
+                Kombo x{currentStreak}!
+              </motion.span>
+            )}
             <span className="text-slate-600" aria-hidden="true">
               ·
             </span>
@@ -324,7 +372,6 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
             </span>
           </div>
 
-          {/* Segmented Streak Progress */}
           <div
             className="grid gap-1 max-w-xs"
             style={{ gridTemplateColumns: `repeat(${streakTarget}, minmax(0, 1fr))` }}
@@ -359,7 +406,7 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
             return (
               <motion.div
                 key={`${slotIdx}-${itemId}`}
-                initial={{ scale: 0.92, opacity: 0 }}
+                initial={{ scale: 0.9, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 transition={{ duration: 0.18 }}
                 title={spec.desc}
@@ -375,7 +422,7 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
                   type="button"
                   disabled={disabled}
                   onClick={() => onActivatePowerup(slotIdx)}
-                  className="text-[11px] font-extrabold px-2 py-1 rounded bg-amber-400 hover:bg-amber-300 text-slate-950 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer shrink-0"
+                  className="arcade-btn-amber text-[11px] font-extrabold px-2 py-1 rounded bg-amber-400 hover:bg-amber-300 text-slate-950 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shrink-0"
                 >
                   Pakai
                 </button>
@@ -388,10 +435,12 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
       {/* Kartu Pertanyaan */}
       <motion.div
         key={questionIndex}
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
+        initial={{ opacity: 0, y: 8, scale: 0.99 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-        className="relative bg-[#131C31] border border-[#23304C] rounded-2xl p-5 sm:p-8 shadow-xl overflow-hidden"
+        className={`relative bg-[#131C31] border border-[#23304C] rounded-2xl shadow-xl overflow-hidden ${
+          compactMode ? 'p-4 sm:p-6' : 'p-5 sm:p-8'
+        }`}
       >
         {/* Overlay Beku (Freeze Debuff) */}
         {isFrozen && (
@@ -417,16 +466,46 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
 
         <div className="flex items-center justify-between gap-2 mb-3 text-xs text-slate-400">
           <span className="sm:hidden">{typeLabelMap[question.type]}</span>
-          {(question.type === 'MC' || question.type === 'TF') && !feedback && (
+          {!feedback && question.type !== 'TEXT' && (
             <span className="hidden sm:inline text-[11px] text-slate-500">
-              Pintasan keyboard: tekan A–{question.type === 'TF' ? 'B' : 'D'}
+              {question.type === 'MS'
+                ? 'Pintasan keyboard: 1–4 / A–D pilih opsi, Enter kirim'
+                : `Pintasan keyboard: tekan 1–${question.type === 'TF' ? '2 / A–B' : '4 / A–D'}`}
             </span>
           )}
         </div>
 
-        <h2 className="text-lg sm:text-2xl font-bold leading-snug text-white mb-6">
+        <h2
+          className={`font-bold leading-snug text-white ${
+            compactMode
+              ? 'text-base sm:text-xl mb-4'
+              : 'text-lg sm:text-2xl mb-5'
+          }`}
+        >
           {question.question}
         </h2>
+
+        {/* Opsional Gambar Pendukung Soal */}
+        {safeImgUrl && (
+          <div className="mb-5">
+            {!imgError ? (
+              <div className="rounded-xl overflow-hidden border border-[#23304C] bg-[#0B1120] max-h-60 flex items-center justify-center">
+                <img
+                  src={safeImgUrl}
+                  alt={`Ilustrasi soal ${questionIndex + 1}`}
+                  referrerPolicy="no-referrer"
+                  onError={() => setImgError(true)}
+                  className="max-h-60 w-auto object-contain mx-auto"
+                />
+              </div>
+            ) : (
+              <div className="rounded-xl border border-dashed border-[#23304C] bg-[#0B1120] p-4 flex items-center justify-center gap-2 text-xs text-slate-400">
+                <ImageOff className="w-4 h-4 text-slate-500" />
+                <span>Gambar soal gagal dimuat dari tautan eksternal.</span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Opsi Jawaban */}
         <div className={`space-y-2.5 ${glitchShake ? 'glitch-active' : ''}`}>
@@ -439,7 +518,7 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
               const isSelectedChoice = origIdx === selectedSingleIndex;
 
               let btnClass =
-                'bg-[#0B1120] hover:bg-slate-800/90 border-[#23304C] text-slate-100';
+                'arcade-btn bg-[#0B1120] hover:bg-slate-800/90 border-[#23304C] text-slate-100';
               if (feedback) {
                 if (isCorrectChoice) {
                   btnClass =
@@ -447,7 +526,8 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
                 } else if (isSelectedChoice && !feedback.isCorrect) {
                   btnClass = 'bg-rose-600 border-rose-400 text-white';
                 } else {
-                  btnClass = 'bg-[#0B1120] border-[#23304C] text-slate-400 opacity-40';
+                  btnClass =
+                    'bg-[#0B1120] border-[#23304C] text-slate-400 opacity-40';
                 }
               } else if (isEliminated) {
                 btnClass =
@@ -455,14 +535,12 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
               }
 
               return (
-                <motion.button
+                <button
                   key={`${questionIndex}-${origIdx}`}
                   type="button"
                   disabled={isLocked}
-                  whileHover={!isLocked ? { y: -1 } : undefined}
-                  whileTap={!isLocked ? { scale: 0.985 } : undefined}
                   onClick={() => onSelectSingle(origIdx)}
-                  className={`w-full text-left p-4 rounded-xl border font-semibold text-sm sm:text-base flex items-center gap-3.5 transition-transform duration-150 min-h-[52px] cursor-pointer disabled:cursor-default ${btnClass}`}
+                  className={`w-full text-left p-4 rounded-xl border font-semibold text-sm sm:text-base flex items-center gap-3.5 min-h-[52px] cursor-pointer disabled:cursor-default ${btnClass}`}
                 >
                   <span
                     className={`w-8 h-8 rounded-lg flex items-center justify-center font-extrabold text-xs shrink-0 ${
@@ -474,12 +552,12 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
                     {letters[dispIdx]}
                   </span>
                   <span className="flex-1">{optText}</span>
-                </motion.button>
+                </button>
               );
             })}
 
           {question.type === 'MS' &&
-            optionOrder.map((origIdx) => {
+            optionOrder.map((origIdx, dispIdx) => {
               const optText = question.options?.[origIdx] ?? '';
               const isEliminated = eliminatedIndices.includes(origIdx);
               const isSelected = selectedMultipleIndices.includes(origIdx);
@@ -487,7 +565,7 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
               const isLocked = Boolean(feedback) || isFrozen || isEliminated;
 
               let btnClass =
-                'bg-[#0B1120] hover:bg-slate-800/80 border-[#23304C] text-slate-100';
+                'arcade-btn bg-[#0B1120] hover:bg-slate-800/80 border-[#23304C] text-slate-100';
               if (feedback) {
                 if (isCorrectChoice) {
                   btnClass =
@@ -495,27 +573,34 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
                 } else if (isSelected) {
                   btnClass = 'bg-rose-600 border-rose-400 text-white';
                 } else {
-                  btnClass = 'bg-[#0B1120] border-[#23304C] text-slate-400 opacity-40';
+                  btnClass =
+                    'bg-[#0B1120] border-[#23304C] text-slate-400 opacity-40';
                 }
               } else if (isEliminated) {
                 btnClass =
                   'bg-[#0B1120] border-[#23304C] text-slate-500 opacity-25 line-through';
               } else if (isSelected) {
-                btnClass = 'bg-amber-400/15 border-amber-400 text-white';
+                btnClass = 'arcade-btn bg-amber-400/15 border-amber-400 text-white';
               }
 
               return (
-                <motion.button
+                <button
                   key={`${questionIndex}-${origIdx}`}
                   type="button"
                   disabled={isLocked}
-                  whileHover={!isLocked ? { y: -1 } : undefined}
-                  whileTap={!isLocked ? { scale: 0.985 } : undefined}
-                  onClick={() => onToggleMultiple(origIdx)}
+                  onClick={() => {
+                    playPopClickFx();
+                    onToggleMultiple(origIdx);
+                  }}
                   aria-pressed={isSelected}
-                  className={`w-full text-left p-4 rounded-xl border font-semibold text-sm sm:text-base flex items-center justify-between gap-3.5 transition-transform duration-150 min-h-[52px] cursor-pointer disabled:cursor-default ${btnClass}`}
+                  className={`w-full text-left p-4 rounded-xl border font-semibold text-sm sm:text-base flex items-center justify-between gap-3.5 min-h-[52px] cursor-pointer disabled:cursor-default ${btnClass}`}
                 >
-                  <span>{optText}</span>
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="w-7 h-7 rounded-lg bg-[#131C31] text-slate-300 border border-[#23304C] flex items-center justify-center font-extrabold text-xs shrink-0">
+                      {letters[dispIdx]}
+                    </span>
+                    <span>{optText}</span>
+                  </div>
                   <span
                     className={`w-6 h-6 rounded border flex items-center justify-center shrink-0 ${
                       isSelected
@@ -525,7 +610,7 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
                   >
                     {isSelected && <Check className="w-4 h-4 stroke-[3]" />}
                   </span>
-                </motion.button>
+                </button>
               );
             })}
 
@@ -555,9 +640,8 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
         {/* Tombol Kirim untuk Multiple Select & Isian Singkat */}
         {!feedback && (question.type === 'MS' || question.type === 'TEXT') && (
           <div className="mt-5">
-            <motion.button
+            <button
               type="button"
-              whileTap={{ scale: 0.985 }}
               disabled={
                 isFrozen ||
                 (question.type === 'MS'
@@ -565,18 +649,18 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
                   : textAnswer.trim().length === 0)
               }
               onClick={onSubmitComplex}
-              className="w-full bg-amber-400 hover:bg-amber-300 disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 font-extrabold py-3.5 rounded-xl transition-colors cursor-pointer disabled:cursor-not-allowed"
+              className="arcade-btn-amber w-full bg-amber-400 hover:bg-amber-300 disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 font-extrabold py-3.5 rounded-xl cursor-pointer disabled:cursor-not-allowed"
             >
               Kirim Jawaban
-            </motion.button>
+            </button>
           </div>
         )}
 
         {/* Kotak Feedback & Pembahasan */}
         {feedback && (
           <motion.div
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
+            initial={{ opacity: 0, y: 8, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
             transition={{ duration: 0.18 }}
             role="status"
             className={`mt-6 p-4 sm:p-5 rounded-xl border ${
@@ -621,12 +705,13 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
               {feedback.explanation}
             </p>
 
-            <motion.button
+            <button
               type="button"
-              whileHover={{ y: -1 }}
-              whileTap={{ scale: 0.99 }}
-              onClick={onNextQuestion}
-              className="mt-4 w-full bg-white hover:bg-slate-200 text-slate-950 font-extrabold text-sm sm:text-base py-3 rounded-xl transition-colors inline-flex items-center justify-center gap-2 cursor-pointer"
+              onClick={() => {
+                playPopClickFx();
+                onNextQuestion();
+              }}
+              className="arcade-btn mt-4 w-full bg-white hover:bg-slate-200 text-slate-950 font-extrabold text-sm sm:text-base py-3 rounded-xl inline-flex items-center justify-center gap-2 cursor-pointer"
             >
               <span>
                 {questionIndex + 1 < totalQuestions
@@ -634,7 +719,7 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
                   : 'Lihat Hasil & Leaderboard'}
               </span>
               <ArrowRight className="w-4 h-4" />
-            </motion.button>
+            </button>
           </motion.div>
         )}
       </motion.div>

@@ -10,11 +10,13 @@ import {
   onSnapshot,
   type Firestore,
 } from 'firebase/firestore';
+import { DEFAULT_FIREBASE_APP_ID, getRoomFirebaseAppId } from './engine';
 import type {
   ActivePlayer,
   CloudStatus,
   PlayerRecord,
   Question,
+  QuizSettings,
   SabotageEvent,
   SessionState,
   WaitingPlayer,
@@ -30,20 +32,27 @@ export const FIREBASE_CONFIG = {
   measurementId: 'G-BZHTSHPJLN',
 };
 
-export const FIREBASE_APP_ID = 'quizmrng-public-v1';
+export const FIREBASE_APP_ID = DEFAULT_FIREBASE_APP_ID;
 
 let dbInstance: Firestore | null = null;
+let currentAppId = DEFAULT_FIREBASE_APP_ID;
 
 function getDb(): Firestore | null {
   return dbInstance;
 }
 
+export function getActiveFirebaseAppId(): string {
+  return currentAppId;
+}
+
 export interface FirebaseCallbacks {
   deviceId: string;
+  roomCode: string;
   onStatusChange: (status: CloudStatus, label: string) => void;
   onLeaderboardUpdate: (records: PlayerRecord[], foundSelf: PlayerRecord | null) => void;
   onQuestionsUpdate: (questions: Question[]) => void;
   onSessionUpdate: (session: SessionState) => void;
+  onSettingsUpdate: (settings: QuizSettings) => void;
   onWaitingPlayersUpdate: (players: WaitingPlayer[]) => void;
   onActivePlayersUpdate: (players: ActivePlayer[]) => void;
   onIncomingSabotage: (event: SabotageEvent) => void;
@@ -52,6 +61,10 @@ export interface FirebaseCallbacks {
 export function initFirebaseSync(callbacks: FirebaseCallbacks): () => void {
   const unsubscribers: (() => void)[] = [];
   let lastHandledSabotageTs = 0;
+  let disposed = false;
+
+  const appId = getRoomFirebaseAppId(callbacks.roomCode);
+  currentAppId = appId;
 
   (async () => {
     try {
@@ -66,8 +79,10 @@ export function initFirebaseSync(callbacks: FirebaseCallbacks): () => void {
         // Anonymous auth may be disabled in console; Firestore rules may still allow public read/write
       }
 
+      if (disposed) return;
+
       const db = dbInstance;
-      const baseSegments = ['artifacts', FIREBASE_APP_ID, 'public', 'data'] as const;
+      const baseSegments = ['artifacts', appId, 'public', 'data'] as const;
 
       // 1. Leaderboard Real-Time
       const lbCol = collection(db, ...baseSegments, 'leaderboard');
@@ -119,7 +134,20 @@ export function initFirebaseSync(callbacks: FirebaseCallbacks): () => void {
         })
       );
 
-      // 4. Ruang Tunggu Live
+      // 4. Pengaturan Kuis & PIN Real-Time
+      const settingsDocRef = doc(db, ...baseSegments, 'config', 'settings');
+      unsubscribers.push(
+        onSnapshot(settingsDocRef, (docSnap) => {
+          if (docSnap.exists()) {
+            const cfg = docSnap.data() as QuizSettings;
+            if (cfg && typeof cfg === 'object') {
+              callbacks.onSettingsUpdate(cfg);
+            }
+          }
+        })
+      );
+
+      // 5. Ruang Tunggu Live
       const waitCol = collection(db, ...baseSegments, 'waiting_room');
       unsubscribers.push(
         onSnapshot(waitCol, (snapshot) => {
@@ -130,7 +158,7 @@ export function initFirebaseSync(callbacks: FirebaseCallbacks): () => void {
         })
       );
 
-      // 5. Pemain Aktif Real-Time (untuk Penguncian Mode & Sabotase Live)
+      // 6. Pemain Aktif Real-Time
       const activeCol = collection(db, ...baseSegments, 'active_players');
       unsubscribers.push(
         onSnapshot(activeCol, (snapshot) => {
@@ -140,7 +168,7 @@ export function initFirebaseSync(callbacks: FirebaseCallbacks): () => void {
         })
       );
 
-      // 6. Sabotase / Debuff Real-Time untuk perangkat ini
+      // 7. Sabotase / Debuff Real-Time untuk perangkat ini
       const sabotageDocRef = doc(
         db,
         ...baseSegments,
@@ -169,6 +197,7 @@ export function initFirebaseSync(callbacks: FirebaseCallbacks): () => void {
   })();
 
   return () => {
+    disposed = true;
     unsubscribers.forEach((unsub) => {
       try {
         unsub();
@@ -183,10 +212,21 @@ export async function saveSessionStateToCloud(payload: SessionState): Promise<vo
   const db = getDb();
   if (!db) return;
   try {
-    const ref = doc(db, 'artifacts', FIREBASE_APP_ID, 'public', 'data', 'config', 'session');
+    const ref = doc(db, 'artifacts', currentAppId, 'public', 'data', 'config', 'session');
     await setDoc(ref, payload);
   } catch {
     // ignore network failure
+  }
+}
+
+export async function saveQuizSettingsToCloud(settings: QuizSettings): Promise<void> {
+  const db = getDb();
+  if (!db) return;
+  try {
+    const ref = doc(db, 'artifacts', currentAppId, 'public', 'data', 'config', 'settings');
+    await setDoc(ref, { ...settings, updatedAt: Date.now() });
+  } catch {
+    // ignore
   }
 }
 
@@ -197,7 +237,7 @@ export async function joinWaitingRoomCloud(player: WaitingPlayer): Promise<void>
     const ref = doc(
       db,
       'artifacts',
-      FIREBASE_APP_ID,
+      currentAppId,
       'public',
       'data',
       'waiting_room',
@@ -216,7 +256,7 @@ export async function leaveWaitingRoomCloud(deviceId: string): Promise<void> {
     const ref = doc(
       db,
       'artifacts',
-      FIREBASE_APP_ID,
+      currentAppId,
       'public',
       'data',
       'waiting_room',
@@ -235,7 +275,7 @@ export async function upsertActivePlayerCloud(player: ActivePlayer): Promise<voi
     const ref = doc(
       db,
       'artifacts',
-      FIREBASE_APP_ID,
+      currentAppId,
       'public',
       'data',
       'active_players',
@@ -254,7 +294,7 @@ export async function unregisterActivePlayerCloud(deviceId: string): Promise<voi
     const ref = doc(
       db,
       'artifacts',
-      FIREBASE_APP_ID,
+      currentAppId,
       'public',
       'data',
       'active_players',
@@ -273,7 +313,7 @@ export async function clearActiveSessionPlayersCloud(): Promise<void> {
     const activeCol = collection(
       db,
       'artifacts',
-      FIREBASE_APP_ID,
+      currentAppId,
       'public',
       'data',
       'active_players'
@@ -281,7 +321,7 @@ export async function clearActiveSessionPlayersCloud(): Promise<void> {
     const waitCol = collection(
       db,
       'artifacts',
-      FIREBASE_APP_ID,
+      currentAppId,
       'public',
       'data',
       'waiting_room'
@@ -303,7 +343,7 @@ export async function saveScoreToCloud(record: PlayerRecord): Promise<boolean> {
     const ref = doc(
       db,
       'artifacts',
-      FIREBASE_APP_ID,
+      currentAppId,
       'public',
       'data',
       'leaderboard',
@@ -323,7 +363,7 @@ export async function fetchCloudLeaderboardOnce(): Promise<PlayerRecord[] | null
     const lbCol = collection(
       db,
       'artifacts',
-      FIREBASE_APP_ID,
+      currentAppId,
       'public',
       'data',
       'leaderboard'
@@ -344,7 +384,7 @@ export async function saveQuestionsToCloud(questions: Question[]): Promise<boole
     const ref = doc(
       db,
       'artifacts',
-      FIREBASE_APP_ID,
+      currentAppId,
       'public',
       'data',
       'config',
@@ -364,7 +404,7 @@ export async function sendSabotageToCloud(payload: SabotageEvent): Promise<void>
     const ref = doc(
       db,
       'artifacts',
-      FIREBASE_APP_ID,
+      currentAppId,
       'public',
       'data',
       'sabotage',
@@ -385,7 +425,7 @@ export async function deleteSingleParticipantFromCloud(
     const ref = doc(
       db,
       'artifacts',
-      FIREBASE_APP_ID,
+      currentAppId,
       'public',
       'data',
       'leaderboard',
@@ -404,7 +444,7 @@ export async function resetCloudLeaderboard(): Promise<void> {
     const lbCol = collection(
       db,
       'artifacts',
-      FIREBASE_APP_ID,
+      currentAppId,
       'public',
       'data',
       'leaderboard'

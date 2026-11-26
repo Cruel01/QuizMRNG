@@ -11,10 +11,21 @@ export interface Question {
   type: QuestionType;
   time: number;
   question: string;
+  imageUrl?: string;
   options?: string[];
   answer?: number | number[];
   acceptedAnswers?: string[];
   explanation: string;
+}
+
+export interface QuizSettings {
+  allowReplay: boolean;
+  shuffleQuestions: boolean;
+  shuffleOptions: boolean;
+  questionLimit: number;
+  compactMode: boolean;
+  adminPin: string;
+  updatedAt?: number;
 }
 
 export type PowerupId =
@@ -84,6 +95,7 @@ export interface ActivePlayer {
   mode: SessionMode;
   score?: number;
   currentQuestion?: number;
+  totalQuestions?: number;
   startedAt: number;
   lastSeen?: number;
 }
@@ -101,6 +113,8 @@ export interface InProgressState {
   deviceId: string;
   playerName: string;
   runId: string;
+  roomCode?: string;
+  questionIds?: string[];
   currentQuestionIndex: number;
   score: number;
   correctCount: number;

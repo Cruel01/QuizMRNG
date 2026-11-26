@@ -1,32 +1,54 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Activity,
+  AlertCircle,
   Check,
+  CheckCircle2,
   Code2,
   Copy,
+  DoorOpen,
   Download,
   FileSpreadsheet,
   Hourglass,
+  KeyRound,
   Lock,
   Pencil,
   Play,
   Plus,
   RotateCcw,
   Search,
+  SlidersHorizontal,
+  Sparkles,
   Trash2,
   Unlock,
+  Upload,
   X,
 } from 'lucide-react';
 import {
   buildCsvContent,
   computeAdminStats,
+  filterFreshActivePlayers,
+  filterQuestionsForAdmin,
+  generateDefaultRoomCode,
+  getCorrectAnswerDisplay,
+  getDynamicCategoryStats,
   getSessionLockFlags,
+  sanitizeImageUrl,
+  sanitizeRoomCode,
 } from '../quiz/engine';
+import {
+  buildQuestionCsvTemplate,
+  exportQuestionsToCsv,
+  parseQuestionsImport,
+} from '../quiz/questionImport';
 import { generateGoogleSitesHtml } from '../quiz/googleSitesExport';
+import { playPopClickFx } from '../quiz/soundFx';
 import type {
   ActivePlayer,
   PlayerRecord,
   Question,
   QuestionType,
+  QuizSettings,
   SessionMode,
   WaitingPlayer,
 } from '../quiz/types';
@@ -37,11 +59,16 @@ interface AdminDashboardProps {
   questions: Question[];
   leaderboard: PlayerRecord[];
   sessionMode: SessionMode;
+  settings: QuizSettings;
+  roomCode: string;
   waitingPlayers: WaitingPlayer[];
   activePlayers: ActivePlayer[];
   onSetSessionMode: (mode: SessionMode) => void;
   onResetSessionMode: () => void;
+  onUpdateSettings: (next: QuizSettings) => void;
+  onSwitchRoom: (nextRoom: string) => void;
   onResetDefaultQuestions: () => void;
+  onImportQuestions: (imported: Question[], mode: 'append' | 'replace') => void;
   onSaveQuestion: (editIndex: number, question: Question) => void;
   onDeleteQuestion: (index: number) => void;
   onDeleteParticipant: (player: PlayerRecord) => void;
@@ -54,11 +81,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   questions,
   leaderboard,
   sessionMode,
+  settings,
+  roomCode,
   waitingPlayers,
   activePlayers,
   onSetSessionMode,
   onResetSessionMode,
+  onUpdateSettings,
+  onSwitchRoom,
   onResetDefaultQuestions,
+  onImportQuestions,
   onSaveQuestion,
   onDeleteQuestion,
   onDeleteParticipant,
@@ -71,15 +103,43 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [pendingDeleteOne, setPendingDeleteOne] = useState<PlayerRecord | null>(
     null
   );
+  const [pendingDeleteQuestionIdx, setPendingDeleteQuestionIdx] = useState<
+    number | null
+  >(null);
   const [confirmResetAll, setConfirmResetAll] = useState(false);
+
+  // Settings & Room local draft inputs
+  const [pinDraft, setPinDraft] = useState(settings.adminPin || '6767');
+  const [roomDraft, setRoomDraft] = useState(roomCode);
+  const [roomConfirmed, setRoomConfirmed] = useState(false);
+  const [limitDraft, setLimitDraft] = useState(String(settings.questionLimit || 0));
+
+  useEffect(() => {
+    setRoomDraft(roomCode);
+  }, [roomCode]);
+
+  useEffect(() => {
+    setPinDraft(settings.adminPin || '6767');
+  }, [settings.adminPin]);
+
+  useEffect(() => {
+    setLimitDraft(String(settings.questionLimit || 0));
+  }, [settings.questionLimit]);
+
+  // Bank Soal Search & Filter
+  const [qSearch, setQSearch] = useState('');
+  const [qCatFilter, setQCatFilter] = useState('ALL');
+  const [qTypeFilter, setQTypeFilter] = useState('ALL');
 
   // CRUD Modal State
   const [crudOpen, setCrudOpen] = useState(false);
   const [crudEditIndex, setCrudEditIndex] = useState(-1);
   const [crudCategory, setCrudCategory] = useState('Manusia & Hewan');
+  const [crudCustomCategory, setCrudCustomCategory] = useState('');
   const [crudType, setCrudType] = useState<QuestionType>('MC');
   const [crudTime, setCrudTime] = useState(25);
   const [crudQuestion, setCrudQuestion] = useState('');
+  const [crudImageUrl, setCrudImageUrl] = useState('');
   const [crudOpts, setCrudOpts] = useState(['', '', '', '']);
   const [crudAnswerMc, setCrudAnswerMc] = useState(0);
   const [crudAnswerTf, setCrudAnswerTf] = useState(0);
@@ -90,9 +150,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const [copiedSitesHtml, setCopiedSitesHtml] = useState(false);
 
+  // Bulk Import CSV / Spreadsheet Modal State
+  const [importOpen, setImportOpen] = useState(false);
+  const [importText, setImportText] = useState('');
+  const [importFileName, setImportFileName] = useState('');
+
+  const importPreview = useMemo(
+    () => parseQuestionsImport(importText),
+    [importText]
+  );
+
   const sortedLeaderboard = useMemo(
     () => [...leaderboard].sort((a, b) => (b.score || 0) - (a.score || 0)),
     [leaderboard]
+  );
+
+  const freshActivePlayers = useMemo(
+    () =>
+      [...filterFreshActivePlayers(activePlayers)].sort(
+        (a, b) => (b.score || 0) - (a.score || 0)
+      ),
+    [activePlayers]
+  );
+
+  const dynamicCategories = useMemo(
+    () => getDynamicCategoryStats(questions),
+    [questions]
+  );
+
+  const filteredQuestions = useMemo(
+    () =>
+      filterQuestionsForAdmin(questions, qSearch, qCatFilter, qTypeFilter),
+    [questions, qSearch, qCatFilter, qTypeFilter]
   );
 
   const stats = useMemo(
@@ -112,8 +201,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   );
 
   const googleSitesHtml = useMemo(
-    () => generateGoogleSitesHtml(questions),
-    [questions]
+    () => generateGoogleSitesHtml(questions, settings, roomCode),
+    [questions, settings, roomCode]
   );
 
   const handleExportCsv = () => {
@@ -154,15 +243,128 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     onNotify('File HTML Google Sites berhasil diunduh!');
   };
 
+  const handleDownloadGithubPagesHtml = () => {
+    const blob = new Blob([googleSitesHtml], { type: 'text/html;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'index.html';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    onNotify('File index.html siap upload ke GitHub Pages berhasil diunduh!');
+  };
+
+  const triggerCsvDownload = (content: string, filename: string) => {
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const handleDownloadQuestionTemplate = () => {
+    triggerCsvDownload(buildQuestionCsvTemplate(), 'template_soal_kuis.csv');
+    onNotify('Template CSV soal berhasil diunduh!');
+  };
+
+  const handleExportQuestionsCsv = () => {
+    triggerCsvDownload(
+      exportQuestionsToCsv(questions),
+      `bank_soal_kuis_${new Date().toISOString().slice(0, 10)}.csv`
+    );
+    onNotify(`${questions.length} soal berhasil diekspor ke CSV!`);
+  };
+
+  const handleImportFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        setImportText(reader.result);
+      }
+    };
+    reader.readAsText(file, 'utf-8');
+    e.target.value = '';
+  };
+
+  const handleConfirmImport = (mode: 'append' | 'replace') => {
+    if (importPreview.questions.length === 0) return;
+    onImportQuestions(importPreview.questions, mode);
+    setImportOpen(false);
+    setImportText('');
+    setImportFileName('');
+  };
+
+  const handleSavePin = () => {
+    const trimmed = pinDraft.trim();
+    if (trimmed.length < 4 || trimmed.length > 10) {
+      onNotify('PIN Admin harus 4–10 karakter.');
+      return;
+    }
+    onUpdateSettings({ ...settings, adminPin: trimmed });
+    onNotify('PIN Admin berhasil diperbarui & disimpan ke Cloud!');
+  };
+
+  const handleGenerateRoomCode = () => {
+    const generated = generateDefaultRoomCode('RUANG');
+    setRoomDraft(generated);
+    onNotify(
+      `Kode acak #${generated} dibuat di kolom input — ubah bila perlu, lalu klik "Buka & Konfirmasi Ruang".`
+    );
+  };
+
+  const handleConfirmRoomStep = () => {
+    const clean = sanitizeRoomCode(roomDraft);
+    if (clean !== roomCode) {
+      onSwitchRoom(clean);
+    }
+    setRoomDraft(clean);
+    setRoomConfirmed(true);
+    onNotify(
+      clean
+        ? `Ruang #${clean} aktif & terkonfirmasi! Kamu sekarang bisa mengatur Mode Pelaksanaan.`
+        : 'Ruang Utama (Umum) dikonfirmasi! Kamu sekarang bisa mengatur Mode Pelaksanaan.'
+    );
+  };
+
+  const handleCopyRoomLink = async () => {
+    const clean = sanitizeRoomCode(roomDraft);
+    try {
+      const url = new URL(window.location.href);
+      if (clean) url.searchParams.set('room', clean);
+      else url.searchParams.delete('room');
+      await navigator.clipboard.writeText(url.toString());
+      onNotify('Tautan undangan ruangan berhasil disalin!');
+    } catch {
+      onNotify('Gunakan parameter ?room=KODE di URL.');
+    }
+  };
+
   const openCrudModal = (editIdx = -1) => {
     setCrudEditIndex(editIdx);
     setCrudError('');
     if (editIdx >= 0 && questions[editIdx]) {
       const q = questions[editIdx];
-      setCrudCategory(q.category);
+      const existingCats = dynamicCategories.map((c) => c.key);
+      if (existingCats.includes(q.category)) {
+        setCrudCategory(q.category);
+        setCrudCustomCategory('');
+      } else {
+        setCrudCategory('__CUSTOM__');
+        setCrudCustomCategory(q.category);
+      }
       setCrudType(q.type);
       setCrudTime(q.time || 25);
       setCrudQuestion(q.question);
+      setCrudImageUrl(q.imageUrl || '');
       setCrudExplanation(q.explanation || '');
       if (q.type === 'MC' || q.type === 'MS') {
         setCrudOpts([0, 1, 2, 3].map((i) => q.options?.[i] || ''));
@@ -176,10 +378,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         q.type === 'TEXT' ? (q.acceptedAnswers || []).join(', ') : ''
       );
     } else {
-      setCrudCategory('Manusia & Hewan');
+      setCrudCategory(dynamicCategories[0]?.key || 'Manusia & Hewan');
+      setCrudCustomCategory('');
       setCrudType('MC');
       setCrudTime(25);
       setCrudQuestion('');
+      setCrudImageUrl('');
       setCrudOpts(['', '', '', '']);
       setCrudAnswerMc(0);
       setCrudAnswerTf(0);
@@ -196,6 +400,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setCrudError('Teks pertanyaan wajib diisi.');
       return;
     }
+    const resolvedCategory =
+      crudCategory === '__CUSTOM__'
+        ? crudCustomCategory.trim()
+        : crudCategory.trim();
+    if (!resolvedCategory) {
+      setCrudError('Nama kategori baru wajib diisi.');
+      return;
+    }
+
+    const cleanImg = sanitizeImageUrl(crudImageUrl);
+    if (crudImageUrl.trim() && !cleanImg) {
+      setCrudError('URL gambar harus diawali https://, http://, atau /');
+      return;
+    }
+
     const expText =
       crudExplanation.trim() || 'Jawaban sesuai kunci yang ditetapkan admin.';
 
@@ -204,12 +423,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         crudEditIndex >= 0
           ? questions[crudEditIndex]?.id || `custom-${Date.now()}`
           : `custom-${Date.now()}`,
-      category: crudCategory,
+      category: resolvedCategory,
       type: crudType,
       time: Math.max(10, Math.min(120, Number(crudTime) || 25)),
       question: qText,
       explanation: expText,
     };
+    if (cleanImg) base.imageUrl = cleanImg;
 
     if (crudType === 'MC') {
       const cleanOpts = crudOpts.map((o) => o.trim());
@@ -253,7 +473,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     let totalDuration = 0;
     let fastestNum: number | null = null;
     let fastestTime = Infinity;
-    const wrongNums: number[] = [];
 
     hist.forEach((h, i) => {
       if (typeof h.timeTaken === 'number') {
@@ -263,7 +482,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           fastestNum = i + 1;
         }
       }
-      if (!h.isCorrect) wrongNums.push(i + 1);
     });
 
     return {
@@ -271,7 +489,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       totalDuration,
       fastestLabel:
         fastestNum !== null ? `Soal #${fastestNum} (${fastestTime}d)` : '-',
-      wrongNums,
     };
   }, [detailPlayer]);
 
@@ -283,8 +500,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* Header Admin */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#23304C] pb-5 mb-5">
         <div>
-          <div className="text-xs font-semibold text-amber-300 mb-1">
-            Panel Penyelenggara
+          <div className="flex flex-wrap items-center gap-2 mb-1.5">
+            <span className="text-xs font-semibold text-amber-300">
+              Panel Penyelenggara
+            </span>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-sky-500/15 border border-sky-400/30 text-sky-300 text-xs font-mono-num font-bold">
+              <DoorOpen className="w-3.5 h-3.5" />
+              Ruang Aktif: {roomCode ? `#${roomCode}` : 'Umum (Default)'}
+            </span>
           </div>
           <h2 className="text-xl sm:text-2xl font-extrabold text-white">
             Kontrol Sesi &amp; Statistik Kuis
@@ -294,15 +517,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={handleExportCsv}
-            className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs sm:text-sm py-2.5 px-4 rounded-lg transition inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+            onClick={() => {
+              playPopClickFx();
+              handleExportCsv();
+            }}
+            className="arcade-btn bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs sm:text-sm py-2.5 px-4 rounded-lg inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
           >
             <FileSpreadsheet className="w-4 h-4" /> Unduh CSV
           </button>
           <button
             type="button"
-            onClick={onClose}
-            className="bg-[#0B1120] hover:bg-slate-800 text-white font-semibold text-xs sm:text-sm py-2.5 px-4 rounded-lg border border-[#23304C] transition inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+            onClick={() => {
+              playPopClickFx();
+              onClose();
+            }}
+            className="arcade-btn bg-[#0B1120] hover:bg-slate-800 text-white font-semibold text-xs sm:text-sm py-2.5 px-4 rounded-lg border border-[#23304C] inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
           >
             <X className="w-4 h-4" /> Tutup
           </button>
@@ -320,7 +549,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             { id: 'session', label: 'Kontrol Sesi' },
             { id: 'stats', label: `Statistik & Peserta (${sortedLeaderboard.length})` },
             { id: 'questions', label: `Bank Soal (${questions.length})` },
-            { id: 'googlesites', label: 'Embed Google Sites' },
+            { id: 'googlesites', label: 'Publish & Embed' },
           ] as const
         ).map((tab) => (
           <button
@@ -328,7 +557,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             role="tab"
             type="button"
             aria-selected={activeTab === tab.id}
-            onClick={() => setActiveTab(tab.id)}
+            onClick={() => {
+              playPopClickFx();
+              setActiveTab(tab.id);
+            }}
             className={`px-3.5 py-2 rounded-lg text-xs font-bold cursor-pointer whitespace-nowrap ${
               activeTab === tab.id
                 ? 'bg-amber-400 text-slate-950'
@@ -343,30 +575,156 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* TAB 1: KONTROL SESI */}
       {activeTab === 'session' && (
         <div className="space-y-5">
+          {/* LANGKAH 1: KODE RUANGAN (PRIORITAS PERTAMA) */}
+          <div
+            className={`bg-[#0B1120] border rounded-xl p-5 transition ${
+              roomConfirmed ? 'border-emerald-500/35' : 'border-sky-400/50'
+            }`}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 font-mono-num text-[11px] font-extrabold">
+                  LANGKAH 1
+                </span>
+                <h3 className="text-base font-bold text-white">
+                  Atur &amp; Konfirmasi Kode Ruangan
+                </h3>
+              </div>
+
+              {roomConfirmed ? (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-bold">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Ruang Terkonfirmasi
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-400/30 text-amber-300 text-xs font-bold">
+                  <AlertCircle className="w-3.5 h-3.5" /> Konfirmasi Ruang Dulu
+                </span>
+              )}
+            </div>
+
+            <div className="bg-[#131C31] border border-[#23304C] rounded-lg px-4 py-3 mb-4 flex flex-wrap items-center justify-between gap-2">
+              <div className="text-xs text-slate-300">
+                Kamu sedang berada di kode ruang:{' '}
+                <strong className="font-mono-num text-sky-300 text-sm">
+                  {roomCode ? `#${roomCode}` : 'UMUM (Default)'}
+                </strong>
+                {sanitizeRoomCode(roomDraft) !== roomCode && (
+                  <span className="ml-2 text-amber-300 font-semibold">
+                    (Draf baru: {sanitizeRoomCode(roomDraft) ? `#${sanitizeRoomCode(roomDraft)}` : 'UMUM'} — belum diterapkan)
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  playPopClickFx();
+                  handleCopyRoomLink();
+                }}
+                className="bg-[#0B1120] hover:bg-slate-800 text-slate-200 border border-[#23304C] font-bold text-xs px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+              >
+                <Copy className="w-3.5 h-3.5" /> Salin Link Ruang
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-400 mb-3 leading-relaxed">
+              Disarankan membuat kode ruangan sendiri (mis.{' '}
+              <code className="text-amber-300">KELAS8A</code> atau{' '}
+              <code className="text-amber-300">IPA-PAGI</code>) agar bank soal
+              dan leaderboard terpisah, atau klik{' '}
+              <strong className="text-slate-200">Buat Kode Acak</strong> untuk
+              generate default. Kosongkan jika ingin tetap memakai Ruang Umum.
+            </p>
+
+            <div className="flex flex-wrap gap-2">
+              <input
+                type="text"
+                aria-label="Kode Ruangan"
+                value={roomDraft}
+                onChange={(e) => setRoomDraft(e.target.value.toUpperCase())}
+                placeholder="Ketik kode buatan sendiri (Kosong = Umum)"
+                maxLength={20}
+                className="flex-1 min-w-[200px] px-3.5 py-2.5 rounded-lg bg-[#131C31] border border-[#23304C] text-white font-mono-num font-bold text-xs uppercase focus:outline-none focus:ring-2 focus:ring-sky-400"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  playPopClickFx();
+                  handleGenerateRoomCode();
+                }}
+                className="bg-[#131C31] hover:bg-slate-800 text-amber-300 border border-[#23304C] font-bold text-xs px-3.5 py-2.5 rounded-lg inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+              >
+                <Sparkles className="w-3.5 h-3.5" /> Buat Kode Acak
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  playPopClickFx();
+                  handleConfirmRoomStep();
+                }}
+                className="arcade-btn bg-sky-400 hover:bg-sky-300 text-slate-950 font-extrabold text-xs px-4 py-2.5 rounded-lg inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+              >
+                <Check className="w-3.5 h-3.5" />{' '}
+                {sanitizeRoomCode(roomDraft) !== roomCode
+                  ? 'Buka & Konfirmasi Ruang'
+                  : 'Konfirmasi Ruang Ini'}
+              </button>
+            </div>
+          </div>
+
+          {/* LANGKAH 2: MODE PELAKSANAAN (TERKUNCI SEBELUM RUANG DIKONFIRMASI) */}
           <div className="bg-[#0B1120] border border-[#23304C] rounded-xl p-5">
-            <h3 className="text-base font-bold text-white mb-1">
-              Mode Pelaksanaan (Bebas vs Live Bareng)
-            </h3>
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded bg-amber-400/20 text-amber-300 font-mono-num text-[11px] font-extrabold">
+                  LANGKAH 2
+                </span>
+                <h3 className="text-base font-bold text-white">
+                  Mode Pelaksanaan (Bebas vs Live Bareng)
+                </h3>
+              </div>
+              {!roomConfirmed && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-300">
+                  <Lock className="w-3.5 h-3.5" /> Selesaikan Langkah 1 dulu
+                </span>
+              )}
+            </div>
             <p className="text-xs text-slate-400 mb-4 leading-relaxed">
               Secara bawaan peserta menunggu pilihan Admin. Jika salah satu mode
               sudah berjalan dengan peserta aktif/selesai, mode lainnya otomatis
               terkunci agar sesi tetap konsisten.
             </p>
 
+            {!roomConfirmed && (
+              <div className="mb-4 bg-amber-500/10 border border-amber-400/30 rounded-lg px-4 py-2.5 text-xs text-amber-200 flex items-center gap-2">
+                <Lock className="w-4 h-4 text-amber-300 shrink-0" />
+                <span>
+                  Atur atau konfirmasi kode ruangan di <strong>Langkah 1</strong>{' '}
+                  terlebih dahulu untuk membuka kontrol Mode Pelaksanaan.
+                </span>
+              </div>
+            )}
+
             <div className="flex flex-wrap gap-2.5 mb-4">
               <button
                 type="button"
-                disabled={lockFlags.isFreeLockedOut}
-                onClick={() => onSetSessionMode('free')}
+                disabled={!roomConfirmed || lockFlags.isFreeLockedOut}
+                onClick={() => {
+                  playPopClickFx();
+                  onSetSessionMode('free');
+                }}
                 className={`px-4 py-2.5 rounded-lg text-xs font-bold border inline-flex items-center gap-1.5 transition whitespace-nowrap ${
-                  lockFlags.isFreeLockedOut
+                  !roomConfirmed || lockFlags.isFreeLockedOut
                     ? 'bg-slate-900 text-slate-600 border-slate-800 cursor-not-allowed'
                     : sessionMode === 'free'
                       ? 'bg-amber-400 text-slate-950 border-amber-300 cursor-pointer'
                       : 'bg-[#131C31] text-slate-200 border-[#23304C] hover:bg-slate-800 cursor-pointer'
                 }`}
               >
-                {lockFlags.isFreeLockedOut ? (
+                {!roomConfirmed ? (
+                  <>
+                    <Lock className="w-3.5 h-3.5" /> Mode Bebas
+                  </>
+                ) : lockFlags.isFreeLockedOut ? (
                   <>
                     <Lock className="w-3.5 h-3.5" /> Mode Bebas (Terkunci)
                   </>
@@ -377,17 +735,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
               <button
                 type="button"
-                disabled={lockFlags.isLiveLockedOut}
-                onClick={() => onSetSessionMode('live_waiting')}
+                disabled={!roomConfirmed || lockFlags.isLiveLockedOut}
+                onClick={() => {
+                  playPopClickFx();
+                  onSetSessionMode('live_waiting');
+                }}
                 className={`px-4 py-2.5 rounded-lg text-xs font-bold border inline-flex items-center gap-1.5 transition whitespace-nowrap ${
-                  lockFlags.isLiveLockedOut
+                  !roomConfirmed || lockFlags.isLiveLockedOut
                     ? 'bg-slate-900 text-slate-600 border-slate-800 cursor-not-allowed'
                     : sessionMode === 'live_waiting'
                       ? 'bg-amber-400 text-slate-950 border-amber-300 cursor-pointer'
                       : 'bg-[#131C31] text-slate-200 border-[#23304C] hover:bg-slate-800 cursor-pointer'
                 }`}
               >
-                {lockFlags.isLiveLockedOut ? (
+                {!roomConfirmed ? (
+                  <>
+                    <Lock className="w-3.5 h-3.5" /> Buka Lobby Live
+                  </>
+                ) : lockFlags.isLiveLockedOut ? (
                   <>
                     <Lock className="w-3.5 h-3.5" /> Live Terkunci
                   </>
@@ -401,12 +766,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <button
                 type="button"
                 disabled={
+                  !roomConfirmed ||
                   lockFlags.isLiveLockedOut ||
                   sessionMode === 'unconfigured' ||
                   sessionMode === 'free'
                 }
-                onClick={() => onSetSessionMode('live_started')}
+                onClick={() => {
+                  playPopClickFx();
+                  onSetSessionMode('live_started');
+                }}
                 className={`px-4 py-2.5 rounded-lg text-xs font-extrabold inline-flex items-center gap-1.5 transition whitespace-nowrap ${
+                  !roomConfirmed ||
                   lockFlags.isLiveLockedOut ||
                   sessionMode === 'unconfigured' ||
                   sessionMode === 'free'
@@ -419,8 +789,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
               <button
                 type="button"
-                onClick={onResetSessionMode}
-                className="px-4 py-2.5 rounded-lg text-xs font-bold bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+                disabled={!roomConfirmed}
+                onClick={() => {
+                  playPopClickFx();
+                  onResetSessionMode();
+                }}
+                className={`px-4 py-2.5 rounded-lg text-xs font-bold border inline-flex items-center gap-1.5 whitespace-nowrap ${
+                  !roomConfirmed
+                    ? 'bg-slate-900 text-slate-600 border-slate-800 cursor-not-allowed'
+                    : 'bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border-rose-500/30 cursor-pointer'
+                }`}
               >
                 <Unlock className="w-3.5 h-3.5" /> Reset Mode
               </button>
@@ -458,36 +836,253 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           </div>
 
-          <div className="bg-[#0B1120] border border-[#23304C] rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <div className="text-sm font-bold text-white">
-                Peserta di Ruang Tunggu Live ({waitingPlayers.length})
+          {/* Monitor Live Peserta Sedang Bermain */}
+          <div className="bg-[#0B1120] border border-[#23304C] rounded-xl p-5">
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <div className="flex items-center gap-2">
+                <Activity className="w-4 h-4 text-emerald-400" />
+                <h3 className="text-sm font-bold text-white">
+                  Pantau Live: Sedang Mengerjakan ({freshActivePlayers.length})
+                </h3>
               </div>
-              <div className="flex flex-wrap gap-1.5 mt-2">
-                {waitingPlayers.length === 0 ? (
-                  <span className="text-xs text-slate-500">
-                    Belum ada peserta menunggu di lobby live.
+              <span className="text-[11px] text-slate-400">
+                Diperbarui otomatis setiap menjawab soal
+              </span>
+            </div>
+
+            {freshActivePlayers.length === 0 ? (
+              <p className="text-xs text-slate-500">
+                Belum ada peserta yang sedang aktif menjawab kuis saat ini.
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-48 overflow-y-auto pr-1">
+                {freshActivePlayers.map((ap) => (
+                  <div
+                    key={ap.deviceId}
+                    className="bg-[#131C31] border border-[#23304C] rounded-lg px-3 py-2 flex items-center justify-between gap-2 text-xs"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-bold text-white truncate">
+                        {ap.name}
+                      </div>
+                      <div className="text-[11px] text-slate-400 font-mono-num">
+                        Soal {ap.currentQuestion || 1}/
+                        {ap.totalQuestions || questions.length}
+                      </div>
+                    </div>
+                    <div className="font-mono-num font-extrabold text-amber-400 shrink-0">
+                      {ap.score ?? 0}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Pengaturan Kuis, Mode Latihan, Ruangan & PIN */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="bg-[#0B1120] border border-[#23304C] rounded-xl p-5 space-y-3">
+              <div className="flex items-center gap-2 text-sm font-bold text-white">
+                <SlidersHorizontal className="w-4 h-4 text-amber-400" />
+                <span>Pengaturan Kuis &amp; Tampilan</span>
+              </div>
+
+              <label className="flex items-start justify-between gap-3 cursor-pointer p-2.5 rounded-lg bg-[#131C31] border border-[#23304C]">
+                <div>
+                  <div className="text-xs font-bold text-white">
+                    Mode Latihan (Boleh Main Ulang)
+                  </div>
+                  <div className="text-[11px] text-slate-400">
+                    Buka kunci 1x per perangkat agar peserta bisa mengulang kuis.
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={settings.allowReplay}
+                  onChange={(e) => {
+                    playPopClickFx();
+                    onUpdateSettings({ ...settings, allowReplay: e.target.checked });
+                  }}
+                  className="mt-1 accent-amber-400 w-4 h-4 cursor-pointer"
+                />
+              </label>
+
+              <label className="flex items-start justify-between gap-3 cursor-pointer p-2.5 rounded-lg bg-[#131C31] border border-[#23304C]">
+                <div>
+                  <div className="text-xs font-bold text-white">
+                    Acak Urutan Soal per Pemain
+                  </div>
+                  <div className="text-[11px] text-slate-400">
+                    Mencegah saling contek urutan nomor antar peserta.
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={settings.shuffleQuestions}
+                  onChange={(e) => {
+                    playPopClickFx();
+                    onUpdateSettings({
+                      ...settings,
+                      shuffleQuestions: e.target.checked,
+                    });
+                  }}
+                  className="mt-1 accent-amber-400 w-4 h-4 cursor-pointer"
+                />
+              </label>
+
+              <label className="flex items-start justify-between gap-3 cursor-pointer p-2.5 rounded-lg bg-[#131C31] border border-[#23304C]">
+                <div>
+                  <div className="text-xs font-bold text-white">
+                    Acak Posisi Opsi A–D
+                  </div>
+                  <div className="text-[11px] text-slate-400">
+                    Posisi opsi pilihan ganda &amp; multi-pilih diacak otomatis.
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={settings.shuffleOptions}
+                  onChange={(e) => {
+                    playPopClickFx();
+                    onUpdateSettings({
+                      ...settings,
+                      shuffleOptions: e.target.checked,
+                    });
+                  }}
+                  className="mt-1 accent-amber-400 w-4 h-4 cursor-pointer"
+                />
+              </label>
+
+              <label className="flex items-start justify-between gap-3 cursor-pointer p-2.5 rounded-lg bg-[#131C31] border border-[#23304C]">
+                <div>
+                  <div className="text-xs font-bold text-white">
+                    Mode Ringkas (Embed Google Sites)
+                  </div>
+                  <div className="text-[11px] text-slate-400">
+                    Menghemat padding vertikal untuk bingkai situs sempit.
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={settings.compactMode}
+                  onChange={(e) => {
+                    playPopClickFx();
+                    onUpdateSettings({
+                      ...settings,
+                      compactMode: e.target.checked,
+                    });
+                  }}
+                  className="mt-1 accent-amber-400 w-4 h-4 cursor-pointer"
+                />
+              </label>
+
+              <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-[#131C31] border border-[#23304C]">
+                <div>
+                  <label
+                    htmlFor="admin-q-limit"
+                    className="text-xs font-bold text-white block"
+                  >
+                    Batas Jumlah Soal / Sesi
+                  </label>
+                  <span className="text-[11px] text-slate-400">
+                    Isi 0 untuk memakai semua ({questions.length}) soal.
                   </span>
-                ) : (
-                  waitingPlayers.map((p) => (
-                    <span
-                      key={p.deviceId}
-                      className="px-2.5 py-1 rounded-md bg-[#131C31] border border-[#23304C] text-xs text-slate-200 font-semibold"
-                    >
-                      {p.name}
-                    </span>
-                  ))
-                )}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    id="admin-q-limit"
+                    type="number"
+                    min={0}
+                    max={200}
+                    value={limitDraft}
+                    onChange={(e) => setLimitDraft(e.target.value)}
+                    className="w-16 px-2.5 py-1.5 rounded bg-[#0B1120] border border-[#23304C] text-white text-xs font-mono-num font-bold text-center"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playPopClickFx();
+                      const val = Math.max(0, Math.floor(Number(limitDraft) || 0));
+                      setLimitDraft(String(val));
+                      onUpdateSettings({ ...settings, questionLimit: val });
+                      onNotify('Batas jumlah soal disimpan.');
+                    }}
+                    className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-xs px-3 py-1.5 rounded cursor-pointer"
+                  >
+                    Terapkan
+                  </button>
+                </div>
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={onResetDefaultQuestions}
-              className="bg-[#131C31] hover:bg-slate-800 text-amber-300 border border-[#23304C] font-bold text-xs px-4 py-2.5 rounded-lg inline-flex items-center gap-1.5 cursor-pointer shrink-0 whitespace-nowrap"
-            >
-              <RotateCcw className="w-3.5 h-3.5" /> Muat Ulang 30 Soal Default
-            </button>
+            <div className="space-y-4">
+              {/* Ubah PIN Admin */}
+              <div className="bg-[#0B1120] border border-[#23304C] rounded-xl p-5 space-y-3">
+                <div className="flex items-center gap-2 text-sm font-bold text-white">
+                  <KeyRound className="w-4 h-4 text-amber-400" />
+                  <span>Ubah PIN Admin</span>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    aria-label="PIN Admin Baru"
+                    value={pinDraft}
+                    onChange={(e) => setPinDraft(e.target.value)}
+                    maxLength={10}
+                    placeholder="Minimal 4 karakter"
+                    className="flex-1 px-3 py-2 rounded-lg bg-[#131C31] border border-[#23304C] text-white font-mono-num font-bold text-xs tracking-widest"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playPopClickFx();
+                      handleSavePin();
+                    }}
+                    className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-xs px-4 py-2 rounded-lg cursor-pointer"
+                  >
+                    Simpan PIN
+                  </button>
+                </div>
+              </div>
+
+              {/* Waiting Room Summary & Reset Default */}
+              <div className="bg-[#0B1120] border border-[#23304C] rounded-xl p-5 space-y-3">
+                <div>
+                  <div className="text-sm font-bold text-white">
+                    Peserta di Ruang Tunggu Live ({waitingPlayers.length})
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {waitingPlayers.length === 0 ? (
+                      <span className="text-xs text-slate-500">
+                        Belum ada peserta menunggu di lobby live.
+                      </span>
+                    ) : (
+                      waitingPlayers.map((p) => (
+                        <span
+                          key={p.deviceId}
+                          className="px-2.5 py-1 rounded-md bg-[#131C31] border border-[#23304C] text-xs text-slate-200 font-semibold"
+                        >
+                          {p.name}
+                        </span>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-[#23304C]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playPopClickFx();
+                      onResetDefaultQuestions();
+                    }}
+                    className="w-full bg-[#131C31] hover:bg-slate-800 text-amber-300 border border-[#23304C] font-bold text-xs px-4 py-2.5 rounded-lg inline-flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" /> Muat Ulang 30 Soal Default
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -653,104 +1248,230 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 soal.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => openCrudModal(-1)}
-              className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-xs sm:text-sm py-2.5 px-4 rounded-lg inline-flex items-center gap-1.5 cursor-pointer w-fit whitespace-nowrap"
-            >
-              <Plus className="w-4 h-4" /> Tambah Soal Baru
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  playPopClickFx();
+                  setImportOpen(true);
+                }}
+                className="arcade-btn bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs sm:text-sm py-2.5 px-3.5 rounded-lg inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+              >
+                <Upload className="w-4 h-4" /> Impor CSV / Excel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  playPopClickFx();
+                  handleExportQuestionsCsv();
+                }}
+                className="arcade-btn bg-[#0B1120] hover:bg-slate-800 text-slate-200 border border-[#23304C] font-bold text-xs sm:text-sm py-2.5 px-3.5 rounded-lg inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+              >
+                <Download className="w-4 h-4 text-sky-400" /> Ekspor Soal CSV
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  playPopClickFx();
+                  openCrudModal(-1);
+                }}
+                className="arcade-btn-amber bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-xs sm:text-sm py-2.5 px-3.5 rounded-lg inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+              >
+                <Plus className="w-4 h-4" /> Tambah Soal
+              </button>
+            </div>
+          </div>
+
+          {/* Pencarian & Filter Bank Soal */}
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 bg-[#0B1120] border border-[#23304C] rounded-xl p-3">
+            <div className="sm:col-span-6 relative">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="search"
+                aria-label="Cari pertanyaan di bank soal"
+                value={qSearch}
+                onChange={(e) => setQSearch(e.target.value)}
+                placeholder="Cari teks soal atau kata kunci..."
+                className="w-full pl-9 pr-3 py-2 rounded-lg bg-[#131C31] border border-[#23304C] text-white text-xs placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400"
+              />
+            </div>
+            <div className="sm:col-span-3">
+              <select
+                aria-label="Filter kategori soal"
+                value={qCatFilter}
+                onChange={(e) => setQCatFilter(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg bg-[#131C31] border border-[#23304C] text-white text-xs font-semibold"
+              >
+                <option value="ALL">Semua Kategori ({questions.length})</option>
+                {dynamicCategories.map((c) => (
+                  <option key={c.key} value={c.key}>
+                    {c.label} ({c.count})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="sm:col-span-3">
+              <select
+                aria-label="Filter tipe soal"
+                value={qTypeFilter}
+                onChange={(e) => setQTypeFilter(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg bg-[#131C31] border border-[#23304C] text-white text-xs font-semibold"
+              >
+                <option value="ALL">Semua Tipe</option>
+                <option value="MC">Pilihan Ganda (MC)</option>
+                <option value="TF">Benar/Salah (TF)</option>
+                <option value="MS">Pilih Beberapa (MS)</option>
+                <option value="TEXT">Isian Singkat (TEXT)</option>
+              </select>
+            </div>
           </div>
 
           <div className="space-y-2.5 max-h-[28rem] overflow-y-auto pr-1">
-            {questions.map((q, idx) => (
-              <div
-                key={q.id || idx}
-                className="bg-[#0B1120] border border-[#23304C] rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-              >
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 text-xs text-slate-400 mb-1">
-                    <span className="font-mono-num font-bold text-white">
-                      #{idx + 1}
-                    </span>
-                    <span aria-hidden="true">·</span>
-                    <span className="text-amber-300 font-semibold">
-                      {q.category}
-                    </span>
-                    <span aria-hidden="true">·</span>
-                    <span className="font-mono-num">
-                      {q.type} ({q.time}d)
-                    </span>
-                  </div>
-                  <p className="text-xs sm:text-sm font-semibold text-slate-100">
-                    {q.question}
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => openCrudModal(idx)}
-                    aria-label={`Edit soal ${idx + 1}`}
-                    className="bg-[#131C31] hover:bg-slate-800 text-amber-300 border border-[#23304C] text-xs font-bold px-3 py-1.5 rounded-lg inline-flex items-center gap-1 cursor-pointer"
-                  >
-                    <Pencil className="w-3 h-3" /> Edit
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onDeleteQuestion(idx)}
-                    aria-label={`Hapus soal ${idx + 1}`}
-                    className="bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-xs font-bold px-3 py-1.5 rounded-lg inline-flex items-center gap-1 cursor-pointer"
-                  >
-                    <Trash2 className="w-3 h-3" /> Hapus
-                  </button>
-                </div>
+            {filteredQuestions.length === 0 ? (
+              <div className="bg-[#0B1120] border border-[#23304C] rounded-xl p-6 text-center text-xs text-slate-400">
+                Tidak ada soal yang cocok dengan pencarian/filter saat ini.
               </div>
-            ))}
+            ) : (
+              filteredQuestions.map(({ question: q, index: idx }) => (
+                <div
+                  key={q.id || idx}
+                  className="bg-[#0B1120] border border-[#23304C] rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                >
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 mb-1">
+                      <span className="font-mono-num font-bold text-white">
+                        #{idx + 1}
+                      </span>
+                      <span aria-hidden="true">·</span>
+                      <span className="text-amber-300 font-semibold">
+                        {q.category}
+                      </span>
+                      <span aria-hidden="true">·</span>
+                      <span className="font-mono-num">
+                        {q.type} ({q.time}d)
+                      </span>
+                      {q.imageUrl && (
+                        <>
+                          <span aria-hidden="true">·</span>
+                          <span className="text-sky-400 font-semibold">
+                            Bergambar
+                          </span>
+                        </>
+                      )}
+                    </div>
+                    <p className="text-xs sm:text-sm font-semibold text-slate-100">
+                      {q.question}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playPopClickFx();
+                        openCrudModal(idx);
+                      }}
+                      aria-label={`Edit soal ${idx + 1}`}
+                      className="bg-[#131C31] hover:bg-slate-800 text-amber-300 border border-[#23304C] text-xs font-bold px-3 py-1.5 rounded-lg inline-flex items-center gap-1 cursor-pointer"
+                    >
+                      <Pencil className="w-3 h-3" /> Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playPopClickFx();
+                        setPendingDeleteQuestionIdx(idx);
+                      }}
+                      aria-label={`Hapus soal ${idx + 1}`}
+                      className="bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-xs font-bold px-3 py-1.5 rounded-lg inline-flex items-center gap-1 cursor-pointer"
+                    >
+                      <Trash2 className="w-3 h-3" /> Hapus
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       )}
 
-      {/* TAB 4: EMBED GOOGLE SITES */}
+      {/* TAB 4: PUBLISH & EMBED */}
       {activeTab === 'googlesites' && (
         <div className="space-y-4">
-          <div className="bg-[#0B1120] border border-[#23304C] rounded-xl p-5 space-y-3">
+          <div className="bg-[#0B1120] border border-[#23304C] rounded-xl p-5 space-y-4">
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-lg bg-amber-400/15 text-amber-300 flex items-center justify-center shrink-0">
                 <Code2 className="w-5 h-5" />
               </div>
               <div>
                 <h3 className="text-base font-bold text-white">
-                  Ekspor HTML Siap Tempel untuk Google Sites
+                  Publish ke GitHub Pages &amp; Embed Google Sites
                 </h3>
                 <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                  Kode ini sudah menyertakan seluruh revisi (perbaikan sabotase
-                  live antar pemain aktif, unduh CSV aman di iframe, indikator
-                  buff aktif, dan {questions.length} soal terbarumu) dengan
-                  konfigurasi Firebase <strong className="text-slate-200">quizmrng</strong>.
+                  File mandiri ini membawa UI pop &amp; suara interaktif, countdown 3-2-1, pengaturan sesi terbaru, {questions.length} soal aktif, PIN Admin, serta ruangan{' '}
+                  <strong className="text-slate-200">{roomCode || 'Umum'}</strong>.
                 </p>
               </div>
             </div>
 
-            <ol className="text-xs text-slate-300 space-y-1.5 list-decimal list-inside bg-[#131C31] border border-[#23304C] rounded-lg p-3.5">
-              <li>Klik tombol <strong>Salin Kode HTML</strong> di bawah.</li>
-              <li>
-                Buka editor <strong>Google Sites</strong> → menu{' '}
-                <strong>Sisipkan (Insert)</strong> → <strong>Sematkan (Embed)</strong> → tab{' '}
-                <strong>Sematkan Kode (Embed Code)</strong>.
-              </li>
-              <li>
-                Tempelkan kode, klik <strong>Berikutnya</strong> →{' '}
-                <strong>Sisipkan</strong>, lalu tarik bingkai embed hingga penuh
-                dan publikasikan.
-              </li>
-            </ol>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="bg-[#131C31] border border-[#23304C] rounded-lg p-3.5">
+                <div className="text-xs font-extrabold text-amber-300 mb-1.5">
+                  Opsi 1 · GitHub Pages (Upload 1 File, Tanpa Terminal)
+                </div>
+                <ol className="text-xs text-slate-300 space-y-1 list-decimal list-inside leading-relaxed">
+                  <li>
+                    Klik <strong>Unduh index.html (GitHub Pages)</strong> di bawah.
+                  </li>
+                  <li>
+                    Buat repositori publik baru di <strong>github.com</strong> →{' '}
+                    <strong>Add file → Upload files</strong> → upload{' '}
+                    <code className="text-amber-300">index.html</code> →{' '}
+                    <strong>Commit changes</strong>.
+                  </li>
+                  <li>
+                    Buka <strong>Settings → Pages</strong> → Source{' '}
+                    <strong>Deploy from a branch</strong> → pilih branch{' '}
+                    <strong>main</strong> &amp; folder <strong>/ (root)</strong> →{' '}
+                    <strong>Save</strong>.
+                  </li>
+                </ol>
+              </div>
+
+              <div className="bg-[#131C31] border border-[#23304C] rounded-lg p-3.5">
+                <div className="text-xs font-extrabold text-emerald-300 mb-1.5">
+                  Opsi 2 · Embed Langsung ke Google Sites
+                </div>
+                <ol className="text-xs text-slate-300 space-y-1 list-decimal list-inside leading-relaxed">
+                  <li>
+                    Klik <strong>Salin Kode HTML Google Sites</strong> di bawah.
+                  </li>
+                  <li>
+                    Di <strong>Google Sites</strong> → <strong>Sisipkan</strong> →{' '}
+                    <strong>Sematkan (Embed)</strong> → tab{' '}
+                    <strong>Sematkan Kode</strong> (atau tempel link GitHub Pages
+                    lewat tab <strong>Berdasarkan URL</strong>).
+                  </li>
+                  <li>
+                    Klik <strong>Berikutnya → Sisipkan</strong>, lalu tarik bingkai
+                    hingga penuh &amp; publikasikan.
+                  </li>
+                </ol>
+              </div>
+            </div>
 
             <div className="flex flex-wrap gap-2.5">
               <button
                 type="button"
+                onClick={handleDownloadGithubPagesHtml}
+                className="arcade-btn bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-extrabold text-xs sm:text-sm px-4 py-2.5 rounded-lg inline-flex items-center gap-1.5 cursor-pointer"
+              >
+                <Download className="w-4 h-4" /> Unduh index.html (GitHub Pages)
+              </button>
+              <button
+                type="button"
                 onClick={handleCopySitesHtml}
-                className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-xs sm:text-sm px-4 py-2.5 rounded-lg inline-flex items-center gap-1.5 cursor-pointer"
+                className="arcade-btn-amber bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-xs sm:text-sm px-4 py-2.5 rounded-lg inline-flex items-center gap-1.5 cursor-pointer"
               >
                 {copiedSitesHtml ? (
                   <>
@@ -765,17 +1486,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <button
                 type="button"
                 onClick={handleDownloadSitesHtml}
-                className="bg-[#131C31] hover:bg-slate-800 text-white font-bold text-xs sm:text-sm px-4 py-2.5 rounded-lg border border-[#23304C] inline-flex items-center gap-1.5 cursor-pointer"
+                className="arcade-btn bg-[#131C31] hover:bg-slate-800 text-white font-bold text-xs sm:text-sm px-4 py-2.5 rounded-lg border border-[#23304C] inline-flex items-center gap-1.5 cursor-pointer"
               >
-                <Download className="w-4 h-4" /> Unduh .html
+                <Download className="w-4 h-4" /> Unduh .html (Google Sites)
               </button>
             </div>
 
             <textarea
               readOnly
-              aria-label="Kode HTML Embed Google Sites"
+              aria-label="Kode HTML Embed & Publish"
               value={googleSitesHtml}
-              rows={8}
+              rows={7}
               className="w-full p-3 rounded-lg bg-[#050914] border border-[#23304C] text-slate-300 font-mono text-[11px] focus:outline-none"
             />
           </div>
@@ -913,9 +1634,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     onChange={(e) => setCrudCategory(e.target.value)}
                     className="w-full px-3 py-2 rounded-lg bg-[#0B1120] border border-[#23304C] text-white text-xs font-semibold"
                   >
-                    <option value="Manusia & Hewan">Manusia &amp; Hewan</option>
-                    <option value="Logika & Hitungan">Logika &amp; Hitungan</option>
-                    <option value="Wawasan Nusantara">Wawasan Nusantara</option>
+                    {dynamicCategories.map((c) => (
+                      <option key={c.key} value={c.key}>
+                        {c.label}
+                      </option>
+                    ))}
+                    <option value="__CUSTOM__">+ Kategori Baru...</option>
                   </select>
                 </div>
 
@@ -958,6 +1682,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </div>
 
+              {crudCategory === '__CUSTOM__' && (
+                <div>
+                  <label
+                    htmlFor="crud-custom-category"
+                    className="block text-xs font-semibold text-slate-300 mb-1"
+                  >
+                    Nama Kategori Baru
+                  </label>
+                  <input
+                    id="crud-custom-category"
+                    type="text"
+                    value={crudCustomCategory}
+                    onChange={(e) => setCrudCustomCategory(e.target.value)}
+                    placeholder="Contoh: Sejarah Kemerdekaan"
+                    className="w-full px-3.5 py-2 rounded-lg bg-white text-slate-950 text-xs font-bold"
+                  />
+                </div>
+              )}
+
               <div>
                 <label
                   htmlFor="crud-question"
@@ -972,6 +1715,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   onChange={(e) => setCrudQuestion(e.target.value)}
                   placeholder="Tulis pertanyaan di sini..."
                   className="w-full px-3.5 py-2.5 rounded-lg bg-white text-slate-950 font-semibold text-sm"
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="crud-image-url"
+                  className="block text-xs font-semibold text-slate-300 mb-1"
+                >
+                  URL Gambar Soal (Opsional)
+                </label>
+                <input
+                  id="crud-image-url"
+                  type="url"
+                  value={crudImageUrl}
+                  onChange={(e) => setCrudImageUrl(e.target.value)}
+                  placeholder="https://contoh.com/gambar-peta.jpg"
+                  className="w-full px-3.5 py-2 rounded-lg bg-[#0B1120] border border-[#23304C] text-white text-xs"
                 />
               </div>
 
@@ -1141,6 +1901,44 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
+      {/* Modal Konfirmasi Hapus Soal */}
+      {pendingDeleteQuestionIdx !== null && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 bg-slate-950/85 z-50 flex items-center justify-center p-4"
+        >
+          <div className="bg-[#131C31] border border-rose-500/30 rounded-2xl p-6 max-w-sm w-full text-center shadow-2xl">
+            <h3 className="text-lg font-extrabold text-white mb-1">
+              Hapus Soal #{pendingDeleteQuestionIdx + 1}?
+            </h3>
+            <p className="text-xs text-slate-300 mb-5 line-clamp-3">
+              {questions[pendingDeleteQuestionIdx]?.question}
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingDeleteQuestionIdx(null)}
+                className="flex-1 bg-[#0B1120] text-white font-bold py-2.5 rounded-lg border border-[#23304C] cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const idx = pendingDeleteQuestionIdx;
+                  setPendingDeleteQuestionIdx(null);
+                  onDeleteQuestion(idx);
+                }}
+                className="flex-1 bg-rose-500 hover:bg-rose-400 text-white font-extrabold py-2.5 rounded-lg cursor-pointer"
+              >
+                Ya, Hapus
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal Konfirmasi Hapus 1 Peserta */}
       {pendingDeleteOne && (
         <div className="fixed inset-0 bg-slate-950/85 z-50 flex items-center justify-center p-4">
@@ -1205,6 +2003,178 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 className="flex-1 bg-rose-500 hover:bg-rose-400 text-white font-extrabold py-2.5 rounded-lg cursor-pointer"
               >
                 Ya, Hapus Semua
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Impor Soal CSV / Spreadsheet / JSON */}
+      {importOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="import-modal-title"
+          className="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        >
+          <div className="bg-[#131C31] border border-[#23304C] rounded-2xl p-5 sm:p-7 max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl space-y-4">
+            <div className="flex items-start justify-between gap-3 border-b border-[#23304C] pb-4">
+              <div>
+                <div className="text-xs font-semibold text-emerald-400 mb-0.5">
+                  Konversi Otomatis Bank Soal
+                </div>
+                <h3
+                  id="import-modal-title"
+                  className="text-lg sm:text-xl font-extrabold text-white"
+                >
+                  Impor Soal dari CSV / Excel / Google Sheets
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  Mendukung file <code className="text-amber-300">.csv</code>{' '}
+                  (koma atau titik-koma Excel Indonesia), salinan tabel Google
+                  Sheets / Excel, maupun <code className="text-amber-300">.json</code>.
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label="Tutup modal impor soal"
+                onClick={() => setImportOpen(false)}
+                className="p-1.5 rounded-lg bg-[#0B1120] border border-[#23304C] text-slate-300 hover:text-white cursor-pointer shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2 bg-[#0B1120] border border-[#23304C] rounded-xl p-3.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-xs px-3.5 py-2 rounded-lg inline-flex items-center gap-1.5 cursor-pointer">
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Pilih File CSV / TXT / JSON</span>
+                  <input
+                    type="file"
+                    accept=".csv,.tsv,.txt,.json,text/csv,text/plain,application/json"
+                    onChange={handleImportFileChange}
+                    className="sr-only"
+                  />
+                </label>
+                {importFileName && (
+                  <span className="text-xs text-emerald-300 font-semibold">
+                    File: {importFileName}
+                  </span>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={handleDownloadQuestionTemplate}
+                className="bg-[#131C31] hover:bg-slate-800 text-sky-300 border border-[#23304C] font-bold text-xs px-3.5 py-2 rounded-lg inline-flex items-center gap-1.5 cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" /> Unduh Template CSV
+              </button>
+            </div>
+
+            <div className="text-[11px] text-slate-400 bg-[#0B1120]/70 border border-[#23304C] rounded-lg px-3.5 py-2.5 leading-relaxed">
+              Urutan kolom:{' '}
+              <code className="text-slate-200 font-mono-num">
+                kategori, tipe, waktu, pertanyaan, opsi_a, opsi_b, opsi_c, opsi_d, jawaban, pembahasan, gambar
+              </code>
+              . Kolom <strong className="text-slate-200">gambar</strong> bersifat opsional (URL).
+            </div>
+
+            <div>
+              <label
+                htmlFor="csv-import-textarea"
+                className="block text-xs font-semibold text-slate-300 mb-1.5"
+              >
+                Atau tempel isi CSV / salinan sel Excel &amp; Google Sheets di sini
+              </label>
+              <textarea
+                id="csv-import-textarea"
+                rows={5}
+                value={importText}
+                onChange={(e) => setImportText(e.target.value)}
+                placeholder={'kategori,tipe,waktu,pertanyaan,opsi_a,opsi_b,opsi_c,opsi_d,jawaban,pembahasan,gambar\nWawasan Nusantara,MC,25,Ibu kota Kalimantan Timur?,Balikpapan,Samarinda,Pontianak,Banjarmasin,B,Samarinda adalah ibu kota resmi Kalimantan Timur.,'}
+                className="w-full p-3 rounded-xl bg-[#050914] border border-[#23304C] text-slate-200 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-amber-400"
+              />
+            </div>
+
+            {importText.trim().length > 0 && (
+              <div className="space-y-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <span className="font-bold text-emerald-400">
+                    {importPreview.questions.length} soal valid siap dikonversi (
+                    {importPreview.format.toUpperCase()})
+                  </span>
+                  {importPreview.errors.length > 0 && (
+                    <span className="font-bold text-rose-400 inline-flex items-center gap-1">
+                      <AlertCircle className="w-3.5 h-3.5" />
+                      {importPreview.errors.length} baris dilewati
+                    </span>
+                  )}
+                </div>
+
+                {importPreview.errors.length > 0 && (
+                  <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-3 max-h-28 overflow-y-auto space-y-1 text-xs text-rose-200">
+                    {importPreview.errors.map((err, i) => (
+                      <div key={i}>
+                        <strong>Baris {err.rowNumber}:</strong> {err.message}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {importPreview.questions.length > 0 && (
+                  <div className="bg-[#0B1120] border border-[#23304C] rounded-xl p-3 max-h-44 overflow-y-auto space-y-2">
+                    {importPreview.questions.slice(0, 20).map((q, idx) => (
+                      <div
+                        key={idx}
+                        className="border-b border-[#23304C]/70 last:border-none pb-2 last:pb-0 text-xs"
+                      >
+                        <div className="flex items-center justify-between gap-2 text-slate-400 mb-0.5">
+                          <span>
+                            <strong className="text-white font-mono-num">
+                              #{idx + 1}
+                            </strong>{' '}
+                            · <span className="text-amber-300">{q.category}</span> ·{' '}
+                            {q.type} ({q.time}d)
+                          </span>
+                          <span className="text-emerald-400 font-semibold truncate max-w-[14rem]">
+                            Kunci: {getCorrectAnswerDisplay(q)}
+                          </span>
+                        </div>
+                        <p className="text-slate-100 font-semibold truncate">
+                          {q.question}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex flex-col sm:flex-row gap-2 pt-2">
+              <button
+                type="button"
+                disabled={importPreview.questions.length === 0}
+                onClick={() => handleConfirmImport('append')}
+                className="flex-1 bg-emerald-400 hover:bg-emerald-300 disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 font-extrabold text-xs sm:text-sm py-2.5 px-4 rounded-xl cursor-pointer disabled:cursor-not-allowed"
+              >
+                Tambahkan ke Bank Soal (+{importPreview.questions.length})
+              </button>
+              <button
+                type="button"
+                disabled={importPreview.questions.length === 0}
+                onClick={() => handleConfirmImport('replace')}
+                className="flex-1 bg-amber-400 hover:bg-amber-300 disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 font-extrabold text-xs sm:text-sm py-2.5 px-4 rounded-xl cursor-pointer disabled:cursor-not-allowed"
+              >
+                Gantikan Bank Soal ({importPreview.questions.length} Soal)
+              </button>
+              <button
+                type="button"
+                onClick={() => setImportOpen(false)}
+                className="bg-[#0B1120] hover:bg-slate-800 text-white font-bold text-xs sm:text-sm py-2.5 px-4 rounded-xl border border-[#23304C] cursor-pointer"
+              >
+                Batal
               </button>
             </div>
           </div>

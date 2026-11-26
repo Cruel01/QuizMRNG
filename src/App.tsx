@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { MotionConfig } from 'motion/react';
-import { ShieldCheck, X } from 'lucide-react';
+import { DoorOpen, ShieldCheck, X } from 'lucide-react';
 import { AdminDashboard } from './components/AdminDashboard';
 import { LeaderboardScreen } from './components/LeaderboardScreen';
 import { LobbyScreen } from './components/LobbyScreen';
@@ -8,6 +8,7 @@ import { QuizScreen, type QuestionFeedbackState } from './components/QuizScreen'
 import { WaitingRoomScreen } from './components/WaitingRoomScreen';
 import {
   calculateEarnedPoints,
+  computeShuffledOrder,
   evaluateAnswer,
   getCorrectAnswerDisplay,
   getDebuffMilestones,
@@ -16,10 +17,12 @@ import {
   getStreakRewardTarget,
   grantPowerupToSlots,
   pickSabotageTarget,
+  prepareQuizDeck,
   rollWeightedPowerup,
   safeGetStorage,
   safeRemoveStorage,
   safeSetStorage,
+  sanitizeRoomCode,
 } from './quiz/engine';
 import {
   clearActiveSessionPlayersCloud,
@@ -30,18 +33,29 @@ import {
   leaveWaitingRoomCloud,
   resetCloudLeaderboard,
   saveQuestionsToCloud,
+  saveQuizSettingsToCloud,
   saveScoreToCloud,
   saveSessionStateToCloud,
   sendSabotageToCloud,
   unregisterActivePlayerCloud,
   upsertActivePlayerCloud,
 } from './quiz/firebaseSync';
-import { ADMIN_PIN, DEFAULT_QUESTIONS, POWERUP_CATALOG } from './quiz/questions';
 import {
+  DEFAULT_QUESTIONS,
+  DEFAULT_QUIZ_SETTINGS,
+  POWERUP_CATALOG,
+} from './quiz/questions';
+import {
+  getSoundMuted,
   playCorrectFx,
+  playCountdownGoFx,
+  playCountdownTickFx,
   playFinishFx,
   playFreezeFx,
+  playPopClickFx,
   playPowerupFx,
+  playStreakComboFx,
+  playUrgentTickFx,
   playWrongFx,
   setSoundMuted,
 } from './quiz/soundFx';
@@ -53,30 +67,77 @@ import type {
   PowerupId,
   Question,
   QuestionHistoryItem,
+  QuizSettings,
   SabotageEvent,
   ScreenName,
   SessionMode,
   WaitingPlayer,
 } from './quiz/types';
 
-const CUSTOM_QUESTIONS_STORAGE_KEY = 'quiz_custom_questions_v2';
+const CUSTOM_QUESTIONS_STORAGE_KEY_PREFIX = 'quiz_custom_questions_v2_';
+const SETTINGS_STORAGE_KEY_PREFIX = 'quiz_settings_v1_';
 const IN_PROGRESS_KEY_PREFIX = 'quiz_in_progress_v1_';
+const ROOM_CODE_STORAGE_KEY = 'quiz_active_room_code_v1';
+
+function readInitialRoomCode(): string {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const paramRoom = params.get('room');
+    if (paramRoom !== null) {
+      return sanitizeRoomCode(paramRoom);
+    }
+  } catch {
+    // ignore
+  }
+  return sanitizeRoomCode(safeGetStorage(ROOM_CODE_STORAGE_KEY) || '');
+}
+
+function readInitialCompactParam(): boolean {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('compact') === '1';
+  } catch {
+    return false;
+  }
+}
 
 export default function App() {
   const deviceId = useMemo(() => getOrCreateDeviceId(), []);
+  const [roomCode, setRoomCode] = useState<string>(() => readInitialRoomCode());
 
-  // Questions state
+  const storageScope = roomCode || 'default';
+
   const [questions, setQuestions] = useState<Question[]>(() => {
-    const raw = safeGetStorage(CUSTOM_QUESTIONS_STORAGE_KEY);
+    const raw =
+      safeGetStorage(CUSTOM_QUESTIONS_STORAGE_KEY_PREFIX + storageScope) ||
+      (!roomCode ? safeGetStorage('quiz_custom_questions_v2') : null);
     if (raw) {
       try {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       } catch {
-        // fallback to default
+        // fallback
       }
     }
     return DEFAULT_QUESTIONS;
+  });
+
+  const [settings, setSettings] = useState<QuizSettings>(() => {
+    const compactParam = readInitialCompactParam();
+    const raw = safeGetStorage(SETTINGS_STORAGE_KEY_PREFIX + storageScope);
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw) as Partial<QuizSettings>;
+        return {
+          ...DEFAULT_QUIZ_SETTINGS,
+          ...parsed,
+          compactMode: compactParam || Boolean(parsed.compactMode),
+        };
+      } catch {
+        // ignore
+      }
+    }
+    return { ...DEFAULT_QUIZ_SETTINGS, compactMode: compactParam };
   });
 
   // Cloud & Session state
@@ -88,9 +149,12 @@ export default function App() {
   const [activePlayers, setActivePlayers] = useState<ActivePlayer[]>([]);
   const [leaderboard, setLeaderboard] = useState<PlayerRecord[]>([]);
 
-  // Device lock & saved record
+  // Device lock & saved record (scoped per room)
+  const completedRecordKey = `quiz_completed_record_${storageScope}_${deviceId}`;
   const [savedRecord, setSavedRecord] = useState<PlayerRecord | null>(() => {
-    const raw = safeGetStorage('quiz_completed_record_' + deviceId);
+    const raw =
+      safeGetStorage(completedRecordKey) ||
+      (!roomCode ? safeGetStorage('quiz_completed_record_' + deviceId) : null);
     if (raw) {
       try {
         return JSON.parse(raw) as PlayerRecord;
@@ -102,10 +166,11 @@ export default function App() {
   });
   const hasPlayedThisDevice = Boolean(savedRecord);
 
-  // Recoverable mid-quiz state (if user accidentally refreshed Google Sites page)
+  // Recoverable mid-quiz state
+  const inProgressKey = `${IN_PROGRESS_KEY_PREFIX}${storageScope}_${deviceId}`;
   const [recoverableProgress, setRecoverableProgress] =
     useState<InProgressState | null>(() => {
-      const raw = safeGetStorage(IN_PROGRESS_KEY_PREFIX + deviceId);
+      const raw = safeGetStorage(inProgressKey);
       if (raw) {
         try {
           const parsed = JSON.parse(raw) as InProgressState;
@@ -128,14 +193,21 @@ export default function App() {
   const [playerName, setPlayerName] = useState('');
   const [nameError, setNameError] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [isMuted, setIsMuted] = useState(false);
+  const [isMuted, setIsMuted] = useState(() => getSoundMuted());
+  const [showConfetti, setShowConfetti] = useState(false);
 
-  // Admin modal state
+  // Admin & Room modal state
   const [adminModalOpen, setAdminModalOpen] = useState(false);
   const [adminPinInput, setAdminPinInput] = useState('');
   const [adminPinError, setAdminPinError] = useState(false);
+  const [roomModalOpen, setRoomModalOpen] = useState(false);
+  const [roomInputDraft, setRoomInputDraft] = useState(roomCode);
 
-  // Active Quiz Gameplay state
+  // Pre-Quiz 3-2-1 Countdown Overlay state
+  const [preCountdown, setPreCountdown] = useState<number | null>(null);
+
+  // Active Quiz Gameplay Deck & state
+  const [playDeck, setPlayDeck] = useState<Question[]>(questions);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [score, setScore] = useState(0);
   const [correctCount, setCorrectCount] = useState(0);
@@ -172,12 +244,12 @@ export default function App() {
   const [textAnswer, setTextAnswer] = useState('');
   const [feedback, setFeedback] = useState<QuestionFeedbackState | null>(null);
 
-  // Refs for timers & callbacks without stale closures
   const screenRef = useRef(screen);
   screenRef.current = screen;
   const immuneRef = useRef(immuneQuestionsRemaining);
   immuneRef.current = immuneQuestionsRemaining;
   const toastTimerRef = useRef<number | null>(null);
+  const isAutostartDemoRef = useRef(false);
 
   const notify = useCallback((msg: string) => {
     setToastMessage(msg);
@@ -187,12 +259,19 @@ export default function App() {
     }, 3400);
   }, []);
 
-  // Load a specific question index cleanly
+  const handleToggleMute = useCallback(() => {
+    setIsMuted((prev) => {
+      const next = !prev;
+      setSoundMuted(next);
+      return next;
+    });
+  }, []);
+
   const prepareQuestionView = useCallback(
     (
       idx: number,
       qList: Question[],
-      shouldShuffleNext: boolean,
+      shouldGlitchShuffle: boolean,
       currentInv: (PowerupId | null)[],
       currentScoreVal: number,
       currentMilestones: number[],
@@ -213,22 +292,20 @@ export default function App() {
       const nextImmune = Math.max(0, currentImmune - 1);
       setImmuneQuestionsRemaining(nextImmune);
 
-      // Option order (shuffled if hit by Glitch Shuffle debuff)
-      const baseOrder = (q.options || []).map((_, i) => i);
-      if (shouldShuffleNext && (q.type === 'MC' || q.type === 'MS')) {
-        for (let i = baseOrder.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [baseOrder[i], baseOrder[j]] = [baseOrder[j], baseOrder[i]];
-        }
+      const optLen = (q.options || []).length;
+      const shouldShuffleOpts =
+        (q.type === 'MC' || q.type === 'MS') &&
+        (shouldGlitchShuffle || settings.shuffleOptions);
+      setOptionOrder(computeShuffledOrder(optLen, shouldShuffleOpts));
+
+      if (shouldGlitchShuffle && (q.type === 'MC' || q.type === 'MS')) {
         setGlitchShuffleForNext(false);
         setGlitchShake(true);
         window.setTimeout(() => setGlitchShake(false), 750);
-      } else if (shouldShuffleNext) {
+      } else if (shouldGlitchShuffle) {
         setGlitchShuffleForNext(false);
       }
-      setOptionOrder(baseOrder);
 
-      // Check debuff milestone reward
       const qNum = idx + 1;
       const milestones = getDebuffMilestones(qList.length);
       if (milestones.includes(qNum) && !currentMilestones.includes(qNum)) {
@@ -247,14 +324,21 @@ export default function App() {
         }
       }
     },
-    [notify]
+    [notify, settings.shuffleOptions]
   );
 
-  const isAutostartDemoRef = useRef(false);
-
   const startGameplay = useCallback(
-    (name: string, modeUsed: SessionMode, runIdUsed: string, localOnly = false) => {
-      const activeList = questions.length > 0 ? questions : DEFAULT_QUESTIONS;
+    (
+      name: string,
+      modeUsed: SessionMode,
+      runIdUsed: string,
+      localOnly = false,
+      skipCountdown = false
+    ) => {
+      const sourceList = questions.length > 0 ? questions : DEFAULT_QUESTIONS;
+      const deck = prepareQuizDeck(sourceList, settings);
+      setPlayDeck(deck);
+
       if (!localOnly) {
         leaveWaitingRoomCloud(deviceId);
         upsertActivePlayerCloud({
@@ -262,7 +346,8 @@ export default function App() {
           name,
           mode: modeUsed,
           score: 0,
-          currentQuestion: 0,
+          currentQuestion: 1,
+          totalQuestions: deck.length,
           startedAt: Date.now(),
           lastSeen: Date.now(),
         });
@@ -281,16 +366,27 @@ export default function App() {
       setIsFrozen(false);
       setFreezeCountdown(0);
       setRecoverableProgress(null);
+      setShowConfetti(false);
 
       setScreen('quiz');
-      prepareQuestionView(0, activeList, false, [null, null], 0, [], 0);
+      prepareQuestionView(0, deck, false, [null, null], 0, [], 0);
+
+      if (!skipCountdown) {
+        setPreCountdown(3);
+        playCountdownTickFx(3);
+      } else {
+        setPreCountdown(null);
+      }
+
       if (!localOnly) {
         safeSetStorage(
-          IN_PROGRESS_KEY_PREFIX + deviceId,
+          inProgressKey,
           JSON.stringify({
             deviceId,
             playerName: name,
             runId: runIdUsed,
+            roomCode,
+            questionIds: deck.map((q) => q.id || q.question),
             currentQuestionIndex: 0,
             score: 0,
             correctCount: 0,
@@ -305,29 +401,47 @@ export default function App() {
         );
       }
     },
-    [deviceId, prepareQuestionView, questions]
+    [deviceId, inProgressKey, prepareQuestionView, questions, roomCode, settings]
   );
 
   // Support ?autostart=1 for automated testing & quick local preview launch
   useEffect(() => {
     try {
       const params = new URLSearchParams(window.location.search);
-      if (params.get('autostart') === '1' && !hasPlayedThisDevice) {
+      if (params.get('autostart') === '1') {
         isAutostartDemoRef.current = true;
         setSessionMode('free');
-        startGameplay('Pemain Uji', 'free', 'autostart', true);
+        startGameplay('Pemain Uji', 'free', 'autostart', true, true);
       }
     } catch {
       // ignore
     }
-    // Run only once on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Initialize Firebase Cloud sync
+  // Pre-quiz 3-2-1 countdown effect
   useEffect(() => {
+    if (preCountdown === null) return;
+    const t = window.setTimeout(() => {
+      if (preCountdown <= 1) {
+        setPreCountdown(null);
+        playCountdownGoFx();
+      } else {
+        const nextStep = preCountdown - 1;
+        setPreCountdown(nextStep);
+        playCountdownTickFx(nextStep);
+      }
+    }, 850);
+    return () => window.clearTimeout(t);
+  }, [preCountdown]);
+
+  // Initialize / Re-initialize Firebase Cloud sync when roomCode changes
+  useEffect(() => {
+    setCloudStatus('connecting');
+    setCloudLabel('Menghubungkan Cloud...');
     const unsub = initFirebaseSync({
       deviceId,
+      roomCode,
       onStatusChange: (status, label) => {
         setCloudStatus(status);
         setCloudLabel(label);
@@ -335,15 +449,12 @@ export default function App() {
       onLeaderboardUpdate: (records, foundSelf) => {
         setLeaderboard(records);
         if (foundSelf) {
-          safeSetStorage(
-            'quiz_completed_record_' + deviceId,
-            JSON.stringify(foundSelf)
-          );
+          safeSetStorage(completedRecordKey, JSON.stringify(foundSelf));
           setSavedRecord(foundSelf);
-        } else {
-          const localRaw = safeGetStorage('quiz_completed_record_' + deviceId);
+        } else if (!isAutostartDemoRef.current) {
+          const localRaw = safeGetStorage(completedRecordKey);
           if (localRaw) {
-            safeRemoveStorage('quiz_completed_record_' + deviceId);
+            safeRemoveStorage(completedRecordKey);
             setSavedRecord(null);
           }
         }
@@ -351,7 +462,7 @@ export default function App() {
       onQuestionsUpdate: (cloudQuestions) => {
         setQuestions(cloudQuestions);
         safeSetStorage(
-          CUSTOM_QUESTIONS_STORAGE_KEY,
+          CUSTOM_QUESTIONS_STORAGE_KEY_PREFIX + storageScope,
           JSON.stringify(cloudQuestions)
         );
       },
@@ -359,6 +470,18 @@ export default function App() {
         if (isAutostartDemoRef.current) return;
         setSessionMode(s.mode);
         setLiveRunId(s.runId || 'default');
+      },
+      onSettingsUpdate: (cloudSettings) => {
+        const merged: QuizSettings = {
+          ...DEFAULT_QUIZ_SETTINGS,
+          ...cloudSettings,
+          compactMode: readInitialCompactParam() || Boolean(cloudSettings.compactMode),
+        };
+        setSettings(merged);
+        safeSetStorage(
+          SETTINGS_STORAGE_KEY_PREFIX + storageScope,
+          JSON.stringify(merged)
+        );
       },
       onWaitingPlayersUpdate: (players) => {
         setWaitingPlayers(players);
@@ -392,19 +515,28 @@ export default function App() {
     });
 
     return unsub;
-  }, [deviceId, notify]);
+  }, [completedRecordKey, deviceId, notify, roomCode, storageScope]);
 
   // Auto-start when Admin clicks Mulai Live while player is in Waiting Room
   useEffect(() => {
+    const effectiveLocked = hasPlayedThisDevice && !settings.allowReplay;
     if (
       screen === 'waiting' &&
       sessionMode === 'live_started' &&
-      !hasPlayedThisDevice &&
+      !effectiveLocked &&
       playerName.trim()
     ) {
       startGameplay(playerName.trim(), 'live_started', liveRunId);
     }
-  }, [hasPlayedThisDevice, liveRunId, playerName, screen, sessionMode, startGameplay]);
+  }, [
+    hasPlayedThisDevice,
+    liveRunId,
+    playerName,
+    screen,
+    sessionMode,
+    settings.allowReplay,
+    startGameplay,
+  ]);
 
   // Freeze countdown timer
   useEffect(() => {
@@ -430,7 +562,7 @@ export default function App() {
       correctAnswerText: string,
       isTimeout: boolean
     ) => {
-      const q = questions[currentQuestionIndex];
+      const q = playDeck[currentQuestionIndex];
       if (!q) return;
 
       const totalTime = q.time || 25;
@@ -451,10 +583,14 @@ export default function App() {
       let nextInventory = [...powerupInventory];
 
       if (isCorrect) {
-        playCorrectFx();
         nextCorrectCount += 1;
         nextStreak += 1;
-        const streakTarget = getStreakRewardTarget(questions.length);
+        if (nextStreak >= 2) {
+          playStreakComboFx(nextStreak);
+        } else {
+          playCorrectFx();
+        }
+        const streakTarget = getStreakRewardTarget(playDeck.length);
         if (nextStreak >= streakTarget) {
           nextStreak = 0;
           const rolled = rollWeightedPowerup();
@@ -507,23 +643,25 @@ export default function App() {
       });
 
       if (!isAutostartDemoRef.current) {
-        // Keep active player live score updated in Firestore so opponent Debuffs target true #1
         upsertActivePlayerCloud({
           deviceId,
           name: playerName,
           mode: sessionMode,
           score: nextScore,
           currentQuestion: currentQuestionIndex + 1,
+          totalQuestions: playDeck.length,
           startedAt: Date.now(),
           lastSeen: Date.now(),
         });
 
         safeSetStorage(
-          IN_PROGRESS_KEY_PREFIX + deviceId,
+          inProgressKey,
           JSON.stringify({
             deviceId,
             playerName,
             runId: liveRunId,
+            roomCode,
+            questionIds: playDeck.map((item) => item.id || item.question),
             currentQuestionIndex,
             score: nextScore,
             correctCount: nextCorrectCount,
@@ -547,92 +685,111 @@ export default function App() {
       doubleScoreActive,
       glitchShuffleForNext,
       immuneQuestionsRemaining,
+      inProgressKey,
       liveRunId,
       notify,
+      playDeck,
       playerHistory,
       playerName,
       powerupInventory,
-      questions,
+      roomCode,
       score,
       sessionMode,
       timeLeft,
     ]
   );
 
-  // Question countdown timer
+  // Question countdown timer (pauses during preCountdown, feedback, and freeze)
   useEffect(() => {
-    if (screen !== 'quiz' || feedback || isFrozen) return;
+    if (screen !== 'quiz' || feedback || isFrozen || preCountdown !== null) {
+      return;
+    }
     const interval = window.setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
           window.clearInterval(interval);
-          const q = questions[currentQuestionIndex];
+          const q = playDeck[currentQuestionIndex];
           if (q) {
-            finalizeQuestion(false, 'Waktu Habis', getCorrectAnswerDisplay(q), true);
+            finalizeQuestion(
+              false,
+              'Waktu Habis',
+              getCorrectAnswerDisplay(q),
+              true
+            );
           }
           return 0;
         }
-        return prev - 1;
+        const nextVal = prev - 1;
+        if (nextVal <= 5 && nextVal > 0) {
+          playUrgentTickFx();
+        }
+        return nextVal;
       });
     }, 1000);
     return () => window.clearInterval(interval);
-  }, [screen, feedback, isFrozen, currentQuestionIndex, questions, finalizeQuestion]);
+  }, [
+    screen,
+    feedback,
+    isFrozen,
+    preCountdown,
+    currentQuestionIndex,
+    playDeck,
+    finalizeQuestion,
+  ]);
 
   const handleSelectSingle = (origIdx: number) => {
-    if (feedback || isFrozen) return;
-    const q = questions[currentQuestionIndex];
+    if (feedback || isFrozen || preCountdown !== null) return;
+    const q = playDeck[currentQuestionIndex];
     if (!q) return;
     setSelectedSingleIndex(origIdx);
     const res = evaluateAnswer(q, origIdx);
-    finalizeQuestion(res.isCorrect, res.userAnswerText, res.correctAnswerText, false);
+    finalizeQuestion(
+      res.isCorrect,
+      res.userAnswerText,
+      res.correctAnswerText,
+      false
+    );
   };
 
   const handleToggleMultiple = (origIdx: number) => {
-    if (feedback || isFrozen) return;
+    if (feedback || isFrozen || preCountdown !== null) return;
     setSelectedMultipleIndices((prev) =>
       prev.includes(origIdx) ? prev.filter((x) => x !== origIdx) : [...prev, origIdx]
     );
   };
 
   const handleSubmitComplex = () => {
-    if (feedback || isFrozen) return;
-    const q = questions[currentQuestionIndex];
+    if (feedback || isFrozen || preCountdown !== null) return;
+    const q = playDeck[currentQuestionIndex];
     if (!q) return;
     if (q.type === 'MS') {
       if (selectedMultipleIndices.length === 0) return;
       const res = evaluateAnswer(q, selectedMultipleIndices);
-      finalizeQuestion(res.isCorrect, res.userAnswerText, res.correctAnswerText, false);
+      finalizeQuestion(
+        res.isCorrect,
+        res.userAnswerText,
+        res.correctAnswerText,
+        false
+      );
     } else if (q.type === 'TEXT') {
       if (!textAnswer.trim()) return;
       const res = evaluateAnswer(q, textAnswer);
-      finalizeQuestion(res.isCorrect, res.userAnswerText, res.correctAnswerText, false);
-    }
-  };
-
-  const handleNextQuestion = () => {
-    const nextIdx = currentQuestionIndex + 1;
-    if (nextIdx < questions.length) {
-      setCurrentQuestionIndex(nextIdx);
-      prepareQuestionView(
-        nextIdx,
-        questions,
-        glitchShuffleForNext,
-        powerupInventory,
-        score,
-        awardedDebuffMilestones,
-        immuneQuestionsRemaining
+      finalizeQuestion(
+        res.isCorrect,
+        res.userAnswerText,
+        res.correctAnswerText,
+        false
       );
-    } else {
-      finishQuiz();
     }
   };
 
   const finishQuiz = () => {
     playFinishFx();
+    setShowConfetti(true);
     if (!isAutostartDemoRef.current) {
       unregisterActivePlayerCloud(deviceId);
     }
-    safeRemoveStorage(IN_PROGRESS_KEY_PREFIX + deviceId);
+    safeRemoveStorage(inProgressKey);
     setRecoverableProgress(null);
 
     const record: PlayerRecord = {
@@ -641,13 +798,13 @@ export default function App() {
       name: playerName,
       score,
       correct: correctCount,
-      totalQuestions: questions.length,
+      totalQuestions: playDeck.length,
       history: playerHistory,
       completedAt: new Date().toISOString(),
     };
 
     if (!isAutostartDemoRef.current) {
-      safeSetStorage('quiz_completed_record_' + deviceId, JSON.stringify(record));
+      safeSetStorage(completedRecordKey, JSON.stringify(record));
     }
     setSavedRecord(record);
     setLeaderboard((prev) => {
@@ -670,10 +827,34 @@ export default function App() {
     }
   };
 
+  const handleNextQuestion = () => {
+    const nextIdx = currentQuestionIndex + 1;
+    if (nextIdx < playDeck.length) {
+      setCurrentQuestionIndex(nextIdx);
+      prepareQuestionView(
+        nextIdx,
+        playDeck,
+        glitchShuffleForNext,
+        powerupInventory,
+        score,
+        awardedDebuffMilestones,
+        immuneQuestionsRemaining
+      );
+    } else {
+      finishQuiz();
+    }
+  };
+
   const handleActivatePowerup = (slotIdx: number) => {
-    if (powerupUsedThisQuestion || isFrozen || feedback) return;
+    if (
+      powerupUsedThisQuestion ||
+      isFrozen ||
+      feedback ||
+      preCountdown !== null
+    )
+      return;
     const itemId = powerupInventory[slotIdx];
-    const q = questions[currentQuestionIndex];
+    const q = playDeck[currentQuestionIndex];
     if (!itemId || !q) return;
 
     if (itemId === 'FIFTY_FIFTY' && q.type !== 'MC' && q.type !== 'MS') {
@@ -728,7 +909,8 @@ export default function App() {
 
   // Lobby actions
   const handleLobbyStart = () => {
-    if (hasPlayedThisDevice || sessionMode === 'unconfigured') return;
+    const effectiveLocked = hasPlayedThisDevice && !settings.allowReplay;
+    if (effectiveLocked || sessionMode === 'unconfigured') return;
     const trimmed = playerName.trim();
     if (!trimmed) {
       setNameError('Silakan masukkan nama terlebih dahulu!');
@@ -750,8 +932,10 @@ export default function App() {
 
   const handleResumeProgress = () => {
     if (!recoverableProgress) return;
+    const deck = questions.length > 0 ? questions : DEFAULT_QUESTIONS;
+    setPlayDeck(deck);
     const resumeIdx = Math.min(
-      questions.length - 1,
+      deck.length - 1,
       recoverableProgress.currentQuestionIndex +
         (recoverableProgress.playerHistory.length >
         recoverableProgress.currentQuestionIndex
@@ -766,10 +950,11 @@ export default function App() {
     setCurrentStreak(recoverableProgress.currentStreak);
     setAwardedDebuffMilestones(recoverableProgress.awardedDebuffMilestones || []);
     setCurrentQuestionIndex(resumeIdx);
+    setPreCountdown(null);
     setScreen('quiz');
     prepareQuestionView(
       resumeIdx,
-      questions,
+      deck,
       recoverableProgress.glitchShuffleActiveForNext,
       recoverableProgress.powerupInventory,
       recoverableProgress.score,
@@ -781,8 +966,52 @@ export default function App() {
   };
 
   const handleDiscardProgress = () => {
-    safeRemoveStorage(IN_PROGRESS_KEY_PREFIX + deviceId);
+    safeRemoveStorage(inProgressKey);
     setRecoverableProgress(null);
+  };
+
+  const handleSwitchRoom = (nextRoomRaw: string) => {
+    const clean = sanitizeRoomCode(nextRoomRaw);
+    if (clean === roomCode) return;
+    safeSetStorage(ROOM_CODE_STORAGE_KEY, clean);
+    setRoomCode(clean);
+    setLeaderboard([]);
+    setWaitingPlayers([]);
+    setActivePlayers([]);
+    setSessionMode('unconfigured');
+    const nextScope = clean || 'default';
+    const localRecRaw = safeGetStorage(`quiz_completed_record_${nextScope}_${deviceId}`);
+    if (localRecRaw) {
+      try {
+        setSavedRecord(JSON.parse(localRecRaw) as PlayerRecord);
+      } catch {
+        setSavedRecord(null);
+      }
+    } else {
+      setSavedRecord(null);
+    }
+    const localQRaw = safeGetStorage(CUSTOM_QUESTIONS_STORAGE_KEY_PREFIX + nextScope);
+    if (localQRaw) {
+      try {
+        const parsed = JSON.parse(localQRaw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setQuestions(parsed);
+          return;
+        }
+      } catch {
+        // ignore
+      }
+    }
+    setQuestions(DEFAULT_QUESTIONS);
+  };
+
+  const handleUpdateSettings = (next: QuizSettings) => {
+    setSettings(next);
+    safeSetStorage(
+      SETTINGS_STORAGE_KEY_PREFIX + storageScope,
+      JSON.stringify(next)
+    );
+    saveQuizSettingsToCloud(next);
   };
 
   // Admin handlers
@@ -838,7 +1067,10 @@ export default function App() {
 
   const syncQuestions = (nextList: Question[]) => {
     setQuestions(nextList);
-    safeSetStorage(CUSTOM_QUESTIONS_STORAGE_KEY, JSON.stringify(nextList));
+    safeSetStorage(
+      CUSTOM_QUESTIONS_STORAGE_KEY_PREFIX + storageScope,
+      JSON.stringify(nextList)
+    );
     saveQuestionsToCloud(nextList);
   };
 
@@ -869,13 +1101,28 @@ export default function App() {
     notify('30 soal default berhasil dimuat ulang!');
   };
 
+  const handleImportQuestions = (
+    imported: Question[],
+    mode: 'append' | 'replace'
+  ) => {
+    if (imported.length === 0) return;
+    const next = mode === 'replace' ? imported : [...questions, ...imported];
+    syncQuestions(next);
+    notify(
+      mode === 'replace'
+        ? `Bank soal diganti dengan ${imported.length} soal hasil impor!`
+        : `${imported.length} soal hasil impor berhasil ditambahkan (Total ${next.length} soal)!`
+    );
+  };
+
   const handleDeleteParticipant = (target: PlayerRecord) => {
     const targetId = target.deviceId || target.id;
     setLeaderboard((prev) =>
       prev.filter((p) => (p.deviceId || p.id) !== targetId)
     );
     if (targetId === deviceId) {
-      safeRemoveStorage('quiz_completed_record_' + deviceId);
+      safeRemoveStorage(completedRecordKey);
+      if (!roomCode) safeRemoveStorage('quiz_completed_record_' + deviceId);
       setSavedRecord(null);
     }
     deleteSingleParticipantFromCloud(targetId);
@@ -883,7 +1130,8 @@ export default function App() {
   };
 
   const handleResetAllLeaderboard = () => {
-    safeRemoveStorage('quiz_completed_record_' + deviceId);
+    safeRemoveStorage(completedRecordKey);
+    if (!roomCode) safeRemoveStorage('quiz_completed_record_' + deviceId);
     setSavedRecord(null);
     setLeaderboard([]);
     resetCloudLeaderboard();
@@ -891,235 +1139,373 @@ export default function App() {
   };
 
   const handleVerifyAdminPin = () => {
-    if (adminPinInput.trim() === ADMIN_PIN) {
+    const validPin = settings.adminPin || DEFAULT_QUIZ_SETTINGS.adminPin;
+    if (adminPinInput.trim() === validPin) {
+      playPopClickFx();
       setAdminModalOpen(false);
       setAdminPinError(false);
       setScreen('admin');
     } else {
+      playWrongFx();
       setAdminPinError(true);
     }
   };
 
-  const activeQuestion = questions[currentQuestionIndex] || questions[0];
+  const activeQuestion = playDeck[currentQuestionIndex] || playDeck[0];
 
   return (
     <MotionConfig reducedMotion="user">
-    <div className="min-h-screen bg-[#0B1120] text-slate-100 flex flex-col items-center justify-start px-3 pt-4 pb-20 sm:p-6">
-      <main className="w-full max-w-4xl mx-auto min-w-0">
-        {screen === 'lobby' && (
-          <LobbyScreen
-            questions={questions}
-            sessionMode={sessionMode}
-            playerName={playerName}
-            nameError={nameError}
-            hasPlayedThisDevice={hasPlayedThisDevice}
-            savedPlayerRecord={savedRecord}
-            leaderboardCount={leaderboard.length}
-            recoverableProgress={recoverableProgress}
-            onPlayerNameChange={(v) => {
-              setPlayerName(v);
-              if (nameError) setNameError('');
+      <div
+        className={`min-h-screen bg-[#0B1120] text-slate-100 flex flex-col items-center justify-start px-3 pb-20 ${
+          settings.compactMode ? 'pt-2 sm:p-4' : 'pt-4 sm:p-6'
+        }`}
+      >
+        <main className="w-full max-w-4xl mx-auto min-w-0">
+          {screen === 'lobby' && (
+            <LobbyScreen
+              questions={questions}
+              sessionMode={sessionMode}
+              settings={settings}
+              roomCode={roomCode}
+              playerName={playerName}
+              nameError={nameError}
+              hasPlayedThisDevice={hasPlayedThisDevice}
+              savedPlayerRecord={savedRecord}
+              leaderboardCount={leaderboard.length}
+              recoverableProgress={recoverableProgress}
+              isMuted={isMuted}
+              onToggleMute={handleToggleMute}
+              onOpenRoomModal={() => {
+                setRoomInputDraft(roomCode);
+                setRoomModalOpen(true);
+              }}
+              onPlayerNameChange={(v) => {
+                setPlayerName(v);
+                if (nameError) setNameError('');
+              }}
+              onStartClick={handleLobbyStart}
+              onResumeProgress={handleResumeProgress}
+              onDiscardProgress={handleDiscardProgress}
+              onOpenLeaderboard={() => {
+                setShowConfetti(false);
+                setScreen('leaderboard');
+              }}
+            />
+          )}
+
+          {screen === 'waiting' && (
+            <WaitingRoomScreen
+              playerName={playerName}
+              deviceId={deviceId}
+              waitingPlayers={waitingPlayers}
+              isMuted={isMuted}
+              onToggleMute={handleToggleMute}
+              onLeave={() => {
+                leaveWaitingRoomCloud(deviceId);
+                setScreen('lobby');
+              }}
+            />
+          )}
+
+          {screen === 'quiz' && activeQuestion && (
+            <div className="relative">
+              {preCountdown !== null && (
+                <div
+                  role="status"
+                  aria-live="assertive"
+                  className="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-6 text-center"
+                >
+                  <div className="text-xs font-bold uppercase tracking-widest text-amber-300 mb-3">
+                    Bersiap Memulai Kuis
+                  </div>
+                  <div
+                    key={preCountdown}
+                    className="anim-countdown-pop w-28 h-28 rounded-3xl bg-amber-400 text-slate-950 font-mono-num font-extrabold text-6xl flex items-center justify-center arcade-btn-amber"
+                  >
+                    {preCountdown}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPreCountdown(null);
+                      playCountdownGoFx();
+                    }}
+                    className="mt-6 text-xs text-slate-400 hover:text-white underline cursor-pointer"
+                  >
+                    Lewati Hitung Mundur
+                  </button>
+                </div>
+              )}
+
+              <QuizScreen
+                question={activeQuestion}
+                questionIndex={currentQuestionIndex}
+                totalQuestions={playDeck.length}
+                score={score}
+                timeLeft={timeLeft}
+                currentStreak={currentStreak}
+                compactMode={settings.compactMode}
+                powerupInventory={powerupInventory}
+                powerupUsedThisQuestion={powerupUsedThisQuestion}
+                doubleScoreActive={doubleScoreActive}
+                immuneQuestionsRemaining={immuneQuestionsRemaining}
+                isFrozen={isFrozen}
+                freezeCountdown={freezeCountdown}
+                freezeAttackerName={freezeAttackerName}
+                optionOrder={optionOrder}
+                eliminatedIndices={eliminatedIndices}
+                selectedSingleIndex={selectedSingleIndex}
+                selectedMultipleIndices={selectedMultipleIndices}
+                textAnswer={textAnswer}
+                glitchShake={glitchShake}
+                feedback={feedback}
+                isMuted={isMuted}
+                onToggleMute={handleToggleMute}
+                onSelectSingle={handleSelectSingle}
+                onToggleMultiple={handleToggleMultiple}
+                onTextAnswerChange={setTextAnswer}
+                onSubmitComplex={handleSubmitComplex}
+                onNextQuestion={handleNextQuestion}
+                onActivatePowerup={handleActivatePowerup}
+              />
+            </div>
+          )}
+
+          {screen === 'leaderboard' && (
+            <LeaderboardScreen
+              deviceId={deviceId}
+              totalQuestions={playDeck.length || questions.length}
+              leaderboard={leaderboard}
+              playerResult={savedRecord}
+              allowReplay={
+                settings.allowReplay &&
+                sessionMode !== 'unconfigured' &&
+                sessionMode !== 'live_waiting'
+              }
+              showConfetti={showConfetti}
+              isMuted={isMuted}
+              onToggleMute={handleToggleMute}
+              onRefresh={async () => {
+                const fresh = await fetchCloudLeaderboardOnce();
+                if (fresh) setLeaderboard(fresh);
+              }}
+              onReplay={() => {
+                setShowConfetti(false);
+                if (playerName.trim()) {
+                  startGameplay(playerName.trim(), sessionMode, liveRunId);
+                } else {
+                  setScreen('lobby');
+                }
+              }}
+              onBackToLobby={() => {
+                setShowConfetti(false);
+                setScreen('lobby');
+              }}
+            />
+          )}
+
+          {screen === 'admin' && (
+            <AdminDashboard
+              questions={questions}
+              leaderboard={leaderboard}
+              sessionMode={sessionMode}
+              settings={settings}
+              roomCode={roomCode}
+              waitingPlayers={waitingPlayers}
+              activePlayers={activePlayers}
+              onSetSessionMode={handleSetSessionMode}
+              onResetSessionMode={handleResetSessionMode}
+              onUpdateSettings={handleUpdateSettings}
+              onSwitchRoom={handleSwitchRoom}
+              onResetDefaultQuestions={handleResetDefaultQuestions}
+              onImportQuestions={handleImportQuestions}
+              onSaveQuestion={handleSaveQuestion}
+              onDeleteQuestion={handleDeleteQuestion}
+              onDeleteParticipant={handleDeleteParticipant}
+              onResetAllLeaderboard={handleResetAllLeaderboard}
+              onClose={() => setScreen('lobby')}
+              onNotify={notify}
+            />
+          )}
+        </main>
+
+        {/* Bottom Floating Status & Admin Access */}
+        <div className="fixed bottom-3 right-3 sm:bottom-4 sm:right-4 flex items-center gap-2 z-40">
+          <div className="bg-[#131C31]/95 text-slate-300 text-[11px] px-3 py-1.5 rounded-lg border border-[#23304C] flex items-center gap-1.5 shadow-lg">
+            <span
+              className={`w-2 h-2 rounded-full shrink-0 ${
+                cloudStatus === 'connected'
+                  ? 'bg-emerald-400'
+                  : cloudStatus === 'error'
+                    ? 'bg-rose-500'
+                    : 'bg-amber-400 animate-pulse'
+              }`}
+            />
+            <span className="truncate">{cloudLabel}</span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              playPopClickFx();
+              setAdminPinInput('');
+              setAdminPinError(false);
+              setAdminModalOpen(true);
             }}
-            onStartClick={handleLobbyStart}
-            onResumeProgress={handleResumeProgress}
-            onDiscardProgress={handleDiscardProgress}
-            onOpenLeaderboard={() => setScreen('leaderboard')}
-          />
-        )}
-
-        {screen === 'waiting' && (
-          <WaitingRoomScreen
-            playerName={playerName}
-            deviceId={deviceId}
-            waitingPlayers={waitingPlayers}
-            onLeave={() => {
-              leaveWaitingRoomCloud(deviceId);
-              setScreen('lobby');
-            }}
-          />
-        )}
-
-        {screen === 'quiz' && activeQuestion && (
-          <QuizScreen
-            question={activeQuestion}
-            questionIndex={currentQuestionIndex}
-            totalQuestions={questions.length}
-            score={score}
-            timeLeft={timeLeft}
-            currentStreak={currentStreak}
-            powerupInventory={powerupInventory}
-            powerupUsedThisQuestion={powerupUsedThisQuestion}
-            doubleScoreActive={doubleScoreActive}
-            immuneQuestionsRemaining={immuneQuestionsRemaining}
-            isFrozen={isFrozen}
-            freezeCountdown={freezeCountdown}
-            freezeAttackerName={freezeAttackerName}
-            optionOrder={optionOrder}
-            eliminatedIndices={eliminatedIndices}
-            selectedSingleIndex={selectedSingleIndex}
-            selectedMultipleIndices={selectedMultipleIndices}
-            textAnswer={textAnswer}
-            glitchShake={glitchShake}
-            feedback={feedback}
-            isMuted={isMuted}
-            onToggleMute={() => {
-              const next = !isMuted;
-              setIsMuted(next);
-              setSoundMuted(next);
-            }}
-            onSelectSingle={handleSelectSingle}
-            onToggleMultiple={handleToggleMultiple}
-            onTextAnswerChange={setTextAnswer}
-            onSubmitComplex={handleSubmitComplex}
-            onNextQuestion={handleNextQuestion}
-            onActivatePowerup={handleActivatePowerup}
-          />
-        )}
-
-        {screen === 'leaderboard' && (
-          <LeaderboardScreen
-            deviceId={deviceId}
-            totalQuestions={questions.length}
-            leaderboard={leaderboard}
-            playerResult={savedRecord}
-            onRefresh={async () => {
-              const fresh = await fetchCloudLeaderboardOnce();
-              if (fresh) setLeaderboard(fresh);
-            }}
-            onBackToLobby={() => setScreen('lobby')}
-          />
-        )}
-
-        {screen === 'admin' && (
-          <AdminDashboard
-            questions={questions}
-            leaderboard={leaderboard}
-            sessionMode={sessionMode}
-            waitingPlayers={waitingPlayers}
-            activePlayers={activePlayers}
-            onSetSessionMode={handleSetSessionMode}
-            onResetSessionMode={handleResetSessionMode}
-            onResetDefaultQuestions={handleResetDefaultQuestions}
-            onSaveQuestion={handleSaveQuestion}
-            onDeleteQuestion={handleDeleteQuestion}
-            onDeleteParticipant={handleDeleteParticipant}
-            onResetAllLeaderboard={handleResetAllLeaderboard}
-            onClose={() => setScreen('lobby')}
-            onNotify={notify}
-          />
-        )}
-      </main>
-
-      {/* Bottom Floating Status & Admin Access */}
-      <div className="fixed bottom-3 right-3 sm:bottom-4 sm:right-4 flex items-center gap-2 z-40">
-        <div className="bg-[#131C31]/95 text-slate-300 text-[11px] px-3 py-1.5 rounded-lg border border-[#23304C] flex items-center gap-1.5 shadow-lg">
-          <span
-            className={`w-2 h-2 rounded-full shrink-0 ${
-              cloudStatus === 'connected'
-                ? 'bg-emerald-400'
-                : cloudStatus === 'error'
-                  ? 'bg-rose-500'
-                  : 'bg-amber-400 animate-pulse'
-            }`}
-          />
-          <span className="truncate">{cloudLabel}</span>
+            className="bg-[#131C31]/95 hover:bg-slate-800 text-slate-100 text-xs font-semibold px-3 py-1.5 rounded-lg border border-[#23304C] inline-flex items-center gap-1.5 shadow-lg cursor-pointer"
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+            <span>Admin</span>
+          </button>
         </div>
 
-        <button
-          type="button"
-          onClick={() => {
-            setAdminPinInput('');
-            setAdminPinError(false);
-            setAdminModalOpen(true);
-          }}
-          className="bg-[#131C31]/95 hover:bg-slate-800 text-slate-100 text-xs font-semibold px-3 py-1.5 rounded-lg border border-[#23304C] inline-flex items-center gap-1.5 shadow-lg cursor-pointer"
-        >
-          <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-          <span>Admin</span>
-        </button>
-      </div>
-
-      {/* Modal Login Admin */}
-      {adminModalOpen && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="admin-login-title"
-          className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-        >
-          <div className="bg-[#131C31] border border-[#23304C] rounded-2xl p-6 max-w-sm w-full shadow-2xl text-center relative">
-            <button
-              type="button"
-              aria-label="Tutup modal admin"
-              onClick={() => setAdminModalOpen(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-white cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
-            <div className="w-12 h-12 rounded-xl bg-amber-400/15 text-amber-300 flex items-center justify-center mx-auto mb-3">
-              <ShieldCheck className="w-6 h-6" />
-            </div>
-            <h3 id="admin-login-title" className="text-lg font-extrabold text-white mb-1">
-              Akses Dashboard Admin
-            </h3>
-            <p className="text-xs text-slate-400 mb-4">
-              Masukkan PIN Admin untuk mengontrol sesi Live, kelola soal &amp;
-              ekspor Google Sites.
-            </p>
-            <label htmlFor="admin-pin-input" className="sr-only">
-              PIN Admin
-            </label>
-            <input
-              id="admin-pin-input"
-              type="password"
-              maxLength={10}
-              autoFocus
-              value={adminPinInput}
-              onChange={(e) => {
-                setAdminPinInput(e.target.value);
-                if (adminPinError) setAdminPinError(false);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleVerifyAdminPin();
-              }}
-              placeholder="Masukkan PIN Admin"
-              className="w-full px-4 py-3 rounded-xl bg-white text-slate-950 font-mono-num font-bold text-center text-lg tracking-widest mb-2 focus:outline-none focus:ring-2 focus:ring-amber-400"
-            />
-            {adminPinError && (
-              <p className="text-rose-400 text-xs mb-3" role="alert">
-                PIN salah! Silakan coba lagi.
+        {/* Modal Ganti Kode Ruangan (Dari Lobby) */}
+        {roomModalOpen && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="room-modal-title"
+            className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          >
+            <div className="bg-[#131C31] border border-[#23304C] rounded-2xl p-6 max-w-sm w-full shadow-2xl text-center relative">
+              <button
+                type="button"
+                aria-label="Tutup modal ruangan"
+                onClick={() => setRoomModalOpen(false)}
+                className="absolute top-4 right-4 text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+              <div className="w-12 h-12 rounded-xl bg-sky-400/15 text-sky-300 flex items-center justify-center mx-auto mb-3">
+                <DoorOpen className="w-6 h-6" />
+              </div>
+              <h3 id="room-modal-title" className="text-lg font-extrabold text-white mb-1">
+                Pilih Ruangan / Kelas
+              </h3>
+              <p className="text-xs text-slate-400 mb-4">
+                Masukkan kode ruangan dari penyelenggara, atau kosongkan untuk bergabung ke ruang umum.
               </p>
-            )}
-            <div className="flex gap-2 mt-4">
-              <button
-                type="button"
-                onClick={() => setAdminModalOpen(false)}
-                className="flex-1 bg-[#0B1120] hover:bg-slate-800 text-white font-semibold py-2.5 rounded-xl border border-[#23304C] cursor-pointer"
-              >
-                Batal
-              </button>
-              <button
-                type="button"
-                onClick={handleVerifyAdminPin}
-                className="flex-1 bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold py-2.5 rounded-xl cursor-pointer"
-              >
-                Masuk
-              </button>
+              <input
+                type="text"
+                aria-label="Kode Ruangan Kelas"
+                maxLength={20}
+                autoFocus
+                value={roomInputDraft}
+                onChange={(e) => setRoomInputDraft(e.target.value.toUpperCase())}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleSwitchRoom(roomInputDraft);
+                    setRoomModalOpen(false);
+                  }
+                }}
+                placeholder="Contoh: KELAS8A (Kosong = Umum)"
+                className="w-full px-4 py-3 rounded-xl bg-white text-slate-950 font-mono-num font-bold text-center text-sm tracking-wider mb-4 uppercase focus:outline-none focus:ring-2 focus:ring-sky-400"
+              />
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRoomModalOpen(false)}
+                  className="flex-1 bg-[#0B1120] hover:bg-slate-800 text-white font-semibold py-2.5 rounded-xl border border-[#23304C] cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    playPopClickFx();
+                    handleSwitchRoom(roomInputDraft);
+                    setRoomModalOpen(false);
+                  }}
+                  className="flex-1 bg-sky-400 hover:bg-sky-300 text-slate-950 font-extrabold py-2.5 rounded-xl cursor-pointer"
+                >
+                  Masuk Ruang
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Toast Notification */}
-      {toastMessage && (
-        <div
-          role="status"
-          className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-[#131C31] text-white border border-amber-400/50 px-5 py-3 rounded-xl shadow-2xl text-xs sm:text-sm font-bold max-w-[calc(100vw-2rem)] text-center"
-        >
-          {toastMessage}
-        </div>
-      )}
-    </div>
+        {/* Modal Login Admin */}
+        {adminModalOpen && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="admin-login-title"
+            className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          >
+            <div className="bg-[#131C31] border border-[#23304C] rounded-2xl p-6 max-w-sm w-full shadow-2xl text-center relative">
+              <button
+                type="button"
+                aria-label="Tutup modal admin"
+                onClick={() => setAdminModalOpen(false)}
+                className="absolute top-4 right-4 text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+              <div className="w-12 h-12 rounded-xl bg-amber-400/15 text-amber-300 flex items-center justify-center mx-auto mb-3">
+                <ShieldCheck className="w-6 h-6" />
+              </div>
+              <h3 id="admin-login-title" className="text-lg font-extrabold text-white mb-1">
+                Akses Dashboard Admin
+              </h3>
+              <p className="text-xs text-slate-400 mb-4">
+                Masukkan PIN Admin untuk mengontrol sesi Live, kelola soal &amp;
+                ekspor Google Sites.
+              </p>
+              <label htmlFor="admin-pin-input" className="sr-only">
+                PIN Admin
+              </label>
+              <input
+                id="admin-pin-input"
+                type="password"
+                maxLength={10}
+                autoFocus
+                value={adminPinInput}
+                onChange={(e) => {
+                  setAdminPinInput(e.target.value);
+                  if (adminPinError) setAdminPinError(false);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleVerifyAdminPin();
+                }}
+                placeholder="Masukkan PIN Admin"
+                className="w-full px-4 py-3 rounded-xl bg-white text-slate-950 font-mono-num font-bold text-center text-lg tracking-widest mb-2 focus:outline-none focus:ring-2 focus:ring-amber-400"
+              />
+              {adminPinError && (
+                <p className="text-rose-400 text-xs mb-3" role="alert">
+                  PIN salah! Silakan coba lagi.
+                </p>
+              )}
+              <div className="flex gap-2 mt-4">
+                <button
+                  type="button"
+                  onClick={() => setAdminModalOpen(false)}
+                  className="flex-1 bg-[#0B1120] hover:bg-slate-800 text-white font-semibold py-2.5 rounded-xl border border-[#23304C] cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleVerifyAdminPin}
+                  className="flex-1 bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold py-2.5 rounded-xl cursor-pointer"
+                >
+                  Masuk
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Toast Notification */}
+        {toastMessage && (
+          <div
+            role="status"
+            className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-[#131C31] text-white border border-amber-400/50 px-5 py-3 rounded-xl shadow-2xl text-xs sm:text-sm font-bold max-w-[calc(100vw-2rem)] text-center"
+          >
+            {toastMessage}
+          </div>
+        )}
+      </div>
     </MotionConfig>
   );
 }

@@ -1,7 +1,16 @@
-import type { PowerupId, PowerupSpec, Question } from './types';
+import type { PowerupId, PowerupSpec, Question, QuizSettings } from './types';
 
 export const ADMIN_PIN = '6767';
 export const MAX_POWERUP_SLOTS = 2;
+
+export const DEFAULT_QUIZ_SETTINGS: QuizSettings = {
+  allowReplay: false,
+  shuffleQuestions: false,
+  shuffleOptions: false,
+  questionLimit: 0,
+  compactMode: false,
+  adminPin: ADMIN_PIN,
+};
 
 export const DEFAULT_QUESTIONS: Question[] = [
   // KATEGORI 1: MANUSIA & HEWAN (10 Soal)

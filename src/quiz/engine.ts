@@ -5,11 +5,194 @@ import type {
   PowerupId,
   PowerupKind,
   Question,
+  QuizSettings,
   SessionMode,
   WaitingPlayer,
 } from './types';
 
 export const STALE_ACTIVE_PLAYER_MS = 30 * 60 * 1000; // 30 menit
+export const DEFAULT_FIREBASE_APP_ID = 'quizmrng-public-v1';
+
+export function sanitizeRoomCode(raw: string): string {
+  return raw
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9_-]/g, '')
+    .slice(0, 20);
+}
+
+export function getRoomFirebaseAppId(roomCode: string): string {
+  const clean = sanitizeRoomCode(roomCode);
+  if (!clean || clean === 'DEFAULT') return DEFAULT_FIREBASE_APP_ID;
+  return `quizmrng-room-${clean}`;
+}
+
+export function generateDefaultRoomCode(prefix = 'RUANG'): string {
+  const cleanPrefix = sanitizeRoomCode(prefix).slice(0, 10) || 'RUANG';
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let suffix = '';
+  for (let i = 0; i < 4; i++) {
+    suffix += alphabet[Math.floor(Math.random() * alphabet.length)];
+  }
+  return sanitizeRoomCode(`${cleanPrefix}-${suffix}`);
+}
+
+export function sanitizeImageUrl(raw?: string): string {
+  if (typeof raw !== 'string') return '';
+  const trimmed = raw.trim();
+  if (!trimmed) return '';
+  if (
+    trimmed.startsWith('https://') ||
+    trimmed.startsWith('http://') ||
+    trimmed.startsWith('data:image/') ||
+    trimmed.startsWith('/')
+  ) {
+    return trimmed;
+  }
+  return '';
+}
+
+export interface CategorySummaryItem {
+  key: string;
+  label: string;
+  count: number;
+  hint: string;
+  accent: string;
+  kind: 'animals' | 'logic' | 'nusantara' | 'custom';
+}
+
+const KNOWN_CATEGORY_META: Record<
+  string,
+  Pick<CategorySummaryItem, 'hint' | 'accent' | 'kind'>
+> = {
+  'Manusia & Hewan': {
+    hint: 'Anatomi tubuh, satwa unik, dan adaptasi biologi.',
+    accent: 'text-emerald-400',
+    kind: 'animals',
+  },
+  'Logika & Hitungan': {
+    hint: 'Teka-teki logika, deret angka, dan aritmatika cepat.',
+    accent: 'text-sky-400',
+    kind: 'logic',
+  },
+  'Wawasan Nusantara': {
+    hint: 'Geografi kepulauan, flora-fauna endemik, dan budaya.',
+    accent: 'text-amber-400',
+    kind: 'nusantara',
+  },
+};
+
+export function getDynamicCategoryStats(
+  questions: Question[]
+): CategorySummaryItem[] {
+  const counts = new Map<string, number>();
+  questions.forEach((q) => {
+    const key = (q.category || 'Umum').trim() || 'Umum';
+    counts.set(key, (counts.get(key) || 0) + 1);
+  });
+
+  const customAccents = [
+    'text-fuchsia-400',
+    'text-cyan-400',
+    'text-rose-400',
+    'text-emerald-400',
+  ];
+  let customIdx = 0;
+
+  return Array.from(counts.entries()).map(([key, count]) => {
+    const known = KNOWN_CATEGORY_META[key];
+    if (known) {
+      return {
+        key,
+        label: key,
+        count,
+        hint: known.hint,
+        accent: known.accent,
+        kind: known.kind,
+      };
+    }
+    const accent = customAccents[customIdx % customAccents.length];
+    customIdx++;
+    return {
+      key,
+      label: key,
+      count,
+      hint: `Topik khusus kategori ${key} (${count} pertanyaan siap dikerjakan).`,
+      accent,
+      kind: 'custom',
+    };
+  });
+}
+
+export function prepareQuizDeck(
+  questions: Question[],
+  settings: Pick<QuizSettings, 'shuffleQuestions' | 'questionLimit'>,
+  rng: () => number = Math.random
+): Question[] {
+  const deck = [...questions];
+  if (settings.shuffleQuestions) {
+    for (let i = deck.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [deck[i], deck[j]] = [deck[j], deck[i]];
+    }
+  }
+  const limit = Math.max(0, Math.floor(Number(settings.questionLimit) || 0));
+  if (limit > 0 && limit < deck.length) {
+    return deck.slice(0, limit);
+  }
+  return deck;
+}
+
+export function computeShuffledOrder(
+  length: number,
+  shouldShuffle: boolean,
+  rng: () => number = Math.random
+): number[] {
+  const arr = Array.from({ length }, (_, i) => i);
+  if (shouldShuffle && arr.length > 1) {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+  }
+  return arr;
+}
+
+export function getPlayerRankInfo(
+  leaderboard: PlayerRecord[],
+  deviceId: string
+): { rank: number | null; total: number } {
+  const sorted = [...leaderboard].sort((a, b) => (b.score || 0) - (a.score || 0));
+  const idx = sorted.findIndex((p) => p.deviceId === deviceId);
+  return {
+    rank: idx >= 0 ? idx + 1 : null,
+    total: sorted.length,
+  };
+}
+
+export function filterQuestionsForAdmin(
+  questions: Question[],
+  query: string,
+  categoryFilter: string = 'ALL',
+  typeFilter: string = 'ALL'
+): Array<{ question: Question; index: number }> {
+  const qLower = query.trim().toLowerCase();
+  return questions
+    .map((question, index) => ({ question, index }))
+    .filter(({ question }) => {
+      if (categoryFilter !== 'ALL' && question.category !== categoryFilter) {
+        return false;
+      }
+      if (typeFilter !== 'ALL' && question.type !== typeFilter) {
+        return false;
+      }
+      if (qLower) {
+        const hay = `${question.question} ${question.category} ${question.explanation || ''}`.toLowerCase();
+        if (!hay.includes(qLower)) return false;
+      }
+      return true;
+    });
+}
 
 export function getStreakRewardTarget(totalQuestions: number): number {
   return Math.max(3, Math.round((totalQuestions || 30) * 0.25));
@@ -163,11 +346,6 @@ export function filterFreshActivePlayers(
   });
 }
 
-/**
- * Picks the #1 opponent to sabotage.
- * Fixes the original bug where active in-game players were ignored because
- * only finished leaderboard records were checked!
- */
 export function pickSabotageTarget(
   activePlayers: ActivePlayer[],
   leaderboardPlayers: PlayerRecord[],
@@ -278,6 +456,7 @@ export function computeAdminStats(
       if (!Array.isArray(p.history)) return;
       const match =
         (q.id && p.history.find((h) => h.questionId === q.id)) ||
+        p.history.find((h) => h.question === q.question) ||
         p.history[idx];
       if (match) {
         answeredCount++;
@@ -364,11 +543,9 @@ export function buildCsvContent(
     ].join(',');
   });
 
-  // Prefix UTF-8 BOM so Excel / Google Sheets renders Indonesian punctuation cleanly
   return '\uFEFF' + [headers.join(','), ...rows].join('\n');
 }
 
-// Storage & Device Fingerprint helpers (safe in sandboxed Google Sites iframes)
 const memoryStorage: Record<string, string> = {};
 
 export function safeGetStorage(key: string): string | null {

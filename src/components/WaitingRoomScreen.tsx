@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { LogOut } from 'lucide-react';
+import { LogOut, Volume2, VolumeX } from 'lucide-react';
+import { playPopClickFx } from '../quiz/soundFx';
 import type { WaitingPlayer } from '../quiz/types';
 import { LiveRadarIcon, SpinningHourglassIcon } from './AnimatedIcons';
 
@@ -8,6 +9,8 @@ interface WaitingRoomScreenProps {
   playerName: string;
   deviceId: string;
   waitingPlayers: WaitingPlayer[];
+  isMuted: boolean;
+  onToggleMute: () => void;
   onLeave: () => void;
 }
 
@@ -15,6 +18,8 @@ export const WaitingRoomScreen: React.FC<WaitingRoomScreenProps> = ({
   playerName,
   deviceId,
   waitingPlayers,
+  isMuted,
+  onToggleMute,
   onLeave,
 }) => {
   return (
@@ -23,8 +28,22 @@ export const WaitingRoomScreen: React.FC<WaitingRoomScreenProps> = ({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
       aria-label="Ruang Tunggu Live"
-      className="bg-[#131C31] border border-[#23304C] rounded-2xl p-6 sm:p-10 shadow-xl text-center"
+      className="relative bg-[#131C31] border border-[#23304C] rounded-2xl p-6 sm:p-10 shadow-xl text-center"
     >
+      <button
+        type="button"
+        onClick={onToggleMute}
+        aria-label={isMuted ? 'Aktifkan suara efek' : 'Bisukan suara efek'}
+        title={isMuted ? 'Aktifkan suara efek' : 'Bisukan suara efek'}
+        className="arcade-btn absolute top-4 right-4 p-2 rounded-lg bg-[#0B1120] border border-[#23304C] text-slate-200 hover:bg-slate-800 cursor-pointer"
+      >
+        {isMuted ? (
+          <VolumeX className="w-4 h-4 text-rose-400" />
+        ) : (
+          <Volume2 className="w-4 h-4 text-emerald-400" />
+        )}
+      </button>
+
       <div className="w-14 h-14 rounded-2xl bg-amber-400/15 border border-amber-400/30 text-amber-300 flex items-center justify-center mx-auto mb-4">
         <LiveRadarIcon className="w-9 h-9" />
       </div>
@@ -80,7 +99,10 @@ export const WaitingRoomScreen: React.FC<WaitingRoomScreenProps> = ({
 
       <button
         type="button"
-        onClick={onLeave}
+        onClick={() => {
+          playPopClickFx();
+          onLeave();
+        }}
         className="inline-flex items-center gap-1.5 text-xs sm:text-sm text-slate-400 hover:text-white underline py-2 px-4 cursor-pointer"
       >
         <LogOut className="w-3.5 h-3.5" /> Ganti Nama / Keluar Ruang Tunggu

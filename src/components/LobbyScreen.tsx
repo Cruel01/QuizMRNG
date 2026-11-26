@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Brain,
+  DoorOpen,
   Lock,
   PawPrint,
   Play,
@@ -10,16 +11,22 @@ import {
   Shield,
   Shuffle,
   Snowflake,
+  Tag,
   Trophy,
   Users,
+  Volume2,
+  VolumeX,
   Zap,
 } from 'lucide-react';
+import { getDynamicCategoryStats } from '../quiz/engine';
 import { POWERUP_CATALOG } from '../quiz/questions';
+import { playPopClickFx } from '../quiz/soundFx';
 import type {
   InProgressState,
   PlayerRecord,
   PowerupId,
   Question,
+  QuizSettings,
   SessionMode,
 } from '../quiz/types';
 import {
@@ -30,39 +37,23 @@ import {
 interface LobbyScreenProps {
   questions: Question[];
   sessionMode: SessionMode;
+  settings: QuizSettings;
+  roomCode: string;
   playerName: string;
   nameError: string;
   hasPlayedThisDevice: boolean;
   savedPlayerRecord: PlayerRecord | null;
   leaderboardCount: number;
   recoverableProgress: InProgressState | null;
+  isMuted: boolean;
+  onToggleMute: () => void;
+  onOpenRoomModal: () => void;
   onPlayerNameChange: (val: string) => void;
   onStartClick: () => void;
   onResumeProgress: () => void;
   onDiscardProgress: () => void;
   onOpenLeaderboard: () => void;
 }
-
-const CATEGORY_META = [
-  {
-    key: 'Manusia & Hewan',
-    label: 'Manusia & Hewan',
-    hint: 'Anatomi tubuh, satwa unik, dan adaptasi biologi.',
-    accent: 'text-emerald-400',
-  },
-  {
-    key: 'Logika & Hitungan',
-    label: 'Logika & Hitungan',
-    hint: 'Teka-teki logika, deret angka, dan aritmatika cepat.',
-    accent: 'text-sky-400',
-  },
-  {
-    key: 'Wawasan Nusantara',
-    label: 'Wawasan Nusantara',
-    hint: 'Geografi kepulauan, flora-fauna endemik, dan budaya.',
-    accent: 'text-amber-400',
-  },
-] as const;
 
 function renderPowerupGlyph(id: PowerupId) {
   switch (id) {
@@ -82,12 +73,17 @@ function renderPowerupGlyph(id: PowerupId) {
 export const LobbyScreen: React.FC<LobbyScreenProps> = ({
   questions,
   sessionMode,
+  settings,
+  roomCode,
   playerName,
   nameError,
   hasPlayedThisDevice,
   savedPlayerRecord,
   leaderboardCount,
   recoverableProgress,
+  isMuted,
+  onToggleMute,
+  onOpenRoomModal,
   onPlayerNameChange,
   onStartClick,
   onResumeProgress,
@@ -98,6 +94,11 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
     'categories'
   );
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+
+  const dynamicCategories = useMemo(
+    () => getDynamicCategoryStats(questions),
+    [questions]
+  );
 
   const modeMeta: Record<SessionMode, { label: string; colorClass: string }> = {
     unconfigured: {
@@ -119,13 +120,14 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
   };
 
   const currentModeInfo = modeMeta[sessionMode];
-
-  const getCategoryCount = (catKey: string) =>
-    questions.filter((q) => q.category === catKey).length;
-
-  const selectedCategoryInfo = CATEGORY_META.find(
+  const selectedCategoryInfo = dynamicCategories.find(
     (c) => c.key === selectedCategory
   );
+  const effectiveLocked = hasPlayedThisDevice && !settings.allowReplay;
+  const activeQuestionTarget =
+    settings.questionLimit > 0 && settings.questionLimit < questions.length
+      ? `${settings.questionLimit} dari ${questions.length}`
+      : `${questions.length}`;
 
   return (
     <motion.section
@@ -133,12 +135,18 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
       aria-label="Beranda Kuis"
-      className="bg-[#131C31] border border-[#23304C] rounded-2xl p-5 sm:p-9 shadow-xl"
+      className={`bg-[#131C31] border border-[#23304C] rounded-2xl shadow-xl ${
+        settings.compactMode ? 'p-4 sm:p-6' : 'p-5 sm:p-9'
+      }`}
     >
       {/* Header Utama */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#23304C] pb-6 mb-6">
+      <div
+        className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#23304C] ${
+          settings.compactMode ? 'pb-4 mb-4' : 'pb-6 mb-6'
+        }`}
+      >
         <div className="flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center shrink-0 anim-float-gentle">
+          <div className="w-12 h-12 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center shrink-0 anim-float-gentle arcade-btn-amber">
             <Zap className="w-6 h-6 stroke-[2.5]" />
           </div>
           <div>
@@ -147,20 +155,61 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
             </h1>
             <p className="text-xs sm:text-sm text-slate-400 mt-0.5">
               <span className="font-mono-num text-slate-200 font-semibold">
-                {questions.length}
+                {activeQuestionTarget}
               </span>{' '}
               pertanyaan · Buff &amp; Debuff real-time
+              {settings.allowReplay ? ' · Mode Latihan' : ''}
+              {settings.shuffleQuestions ? ' · Soal Acak' : ''}
             </p>
           </div>
         </div>
 
-        <div
-          className={`inline-flex items-center gap-2 text-xs sm:text-sm font-semibold ${currentModeInfo.colorClass}`}
-        >
-          {(sessionMode === 'unconfigured' || sessionMode === 'live_waiting') && (
-            <SpinningHourglassIcon className="w-4 h-4 shrink-0" />
-          )}
-          <span>{currentModeInfo.label}</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <div
+            className={`inline-flex items-center gap-2 text-xs font-semibold ${currentModeInfo.colorClass}`}
+          >
+            {(sessionMode === 'unconfigured' ||
+              sessionMode === 'live_waiting') && (
+              <SpinningHourglassIcon className="w-4 h-4 shrink-0" />
+            )}
+            <span>{currentModeInfo.label}</span>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                playPopClickFx();
+                onOpenRoomModal();
+              }}
+              title="Ganti Kode Ruangan / Kelas"
+              className="arcade-btn px-2.5 py-1.5 rounded-lg bg-[#0B1120] hover:bg-slate-800 border border-[#23304C] text-xs font-bold text-slate-200 inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <DoorOpen className="w-3.5 h-3.5 text-sky-400" />
+              <span className="font-mono-num">
+                {roomCode ? `#${roomCode}` : 'Umum'}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                onToggleMute();
+                if (isMuted) {
+                  setTimeout(() => playPopClickFx(), 20);
+                }
+              }}
+              aria-label={isMuted ? 'Aktifkan suara efek' : 'Bisukan suara efek'}
+              title={isMuted ? 'Aktifkan suara efek' : 'Bisukan suara efek'}
+              className="arcade-btn p-2 rounded-lg bg-[#0B1120] hover:bg-slate-800 border border-[#23304C] text-slate-200 cursor-pointer"
+            >
+              {isMuted ? (
+                <VolumeX className="w-4 h-4 text-rose-400" />
+              ) : (
+                <Volume2 className="w-4 h-4 text-emerald-400" />
+              )}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -175,21 +224,27 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
             type="button"
             role="tab"
             aria-selected={lobbyTab === 'categories'}
-            onClick={() => setLobbyTab('categories')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer whitespace-nowrap ${
+            onClick={() => {
+              playPopClickFx();
+              setLobbyTab('categories');
+            }}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer whitespace-nowrap transition-colors ${
               lobbyTab === 'categories'
                 ? 'bg-amber-400 text-slate-950'
                 : 'text-slate-300 hover:text-white'
             }`}
           >
-            Kategori Soal
+            Kategori Soal ({dynamicCategories.length})
           </button>
           <button
             type="button"
             role="tab"
             aria-selected={lobbyTab === 'powerups'}
-            onClick={() => setLobbyTab('powerups')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer whitespace-nowrap ${
+            onClick={() => {
+              playPopClickFx();
+              setLobbyTab('powerups');
+            }}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer whitespace-nowrap transition-colors ${
               lobbyTab === 'powerups'
                 ? 'bg-amber-400 text-slate-950'
                 : 'text-slate-300 hover:text-white'
@@ -214,44 +269,45 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.16 }}
-            className="mb-7 space-y-3"
+            className="mb-6 space-y-3"
           >
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {CATEGORY_META.map((cat) => {
+              {dynamicCategories.map((cat) => {
                 const isSelected = selectedCategory === cat.key;
-                const count = getCategoryCount(cat.key);
                 return (
-                  <motion.button
+                  <button
                     key={cat.key}
                     type="button"
-                    whileHover={{ y: -2 }}
-                    whileTap={{ scale: 0.985 }}
-                    onClick={() =>
-                      setSelectedCategory(isSelected ? null : cat.key)
-                    }
+                    onClick={() => {
+                      playPopClickFx();
+                      setSelectedCategory(isSelected ? null : cat.key);
+                    }}
                     aria-expanded={isSelected}
-                    className={`text-left rounded-xl p-4 border flex sm:flex-col items-center sm:items-start justify-between gap-2 transition-colors cursor-pointer ${
+                    className={`arcade-btn text-left rounded-xl p-4 border flex sm:flex-col items-center sm:items-start justify-between gap-2 cursor-pointer ${
                       isSelected
-                        ? 'bg-slate-800/70 border-amber-400/60'
-                        : 'bg-[#0B1120] border-[#23304C] hover:border-slate-600'
+                        ? 'bg-slate-800/80 border-amber-400/70'
+                        : 'bg-[#0B1120] border-[#23304C] hover:border-slate-500'
                     }`}
                   >
-                    <div className="flex items-center gap-2 text-slate-200 text-xs sm:text-sm font-medium">
-                      {cat.key === 'Manusia & Hewan' && (
+                    <div className="flex items-center gap-2 text-slate-200 text-xs sm:text-sm font-medium min-w-0">
+                      {cat.kind === 'animals' && (
                         <PawPrint className="w-4 h-4 text-emerald-400 shrink-0" />
                       )}
-                      {cat.key === 'Logika & Hitungan' && (
+                      {cat.kind === 'logic' && (
                         <Brain className="w-4 h-4 text-sky-400 shrink-0" />
                       )}
-                      {cat.key === 'Wawasan Nusantara' && (
+                      {cat.kind === 'nusantara' && (
                         <NusantaraCompassIcon className="w-4 h-4 text-amber-400 shrink-0" />
                       )}
-                      <span>{cat.label}</span>
+                      {cat.kind === 'custom' && (
+                        <Tag className={`w-4 h-4 shrink-0 ${cat.accent}`} />
+                      )}
+                      <span className="truncate">{cat.label}</span>
                     </div>
-                    <div className="font-mono-num font-bold text-base sm:text-xl text-white">
-                      {count} Soal
+                    <div className="font-mono-num font-bold text-base sm:text-xl text-white shrink-0">
+                      {cat.count} Soal
                     </div>
-                  </motion.button>
+                  </button>
                 );
               })}
             </div>
@@ -282,7 +338,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.16 }}
-            className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-7"
+            className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-6"
           >
             {Object.values(POWERUP_CATALOG).map((item) => (
               <div
@@ -317,7 +373,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
       </AnimatePresence>
 
       {/* Banner Pemulihan Sesi Jika Halaman Sempat Ter-refresh */}
-      {recoverableProgress && !hasPlayedThisDevice && (
+      {recoverableProgress && !effectiveLocked && (
         <div className="bg-sky-500/10 border border-sky-400/30 rounded-xl p-4 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h2 className="text-sm font-bold text-sky-300">
@@ -333,14 +389,20 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
           <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"
-              onClick={onResumeProgress}
-              className="bg-sky-400 hover:bg-sky-300 text-slate-950 font-bold text-xs px-4 py-2.5 rounded-lg transition cursor-pointer inline-flex items-center gap-1.5 whitespace-nowrap"
+              onClick={() => {
+                playPopClickFx();
+                onResumeProgress();
+              }}
+              className="arcade-btn bg-sky-400 hover:bg-sky-300 text-slate-950 font-bold text-xs px-4 py-2.5 rounded-lg cursor-pointer inline-flex items-center gap-1.5 whitespace-nowrap"
             >
               <RotateCcw className="w-3.5 h-3.5" /> Lanjutkan
             </button>
             <button
               type="button"
-              onClick={onDiscardProgress}
+              onClick={() => {
+                playPopClickFx();
+                onDiscardProgress();
+              }}
               className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs px-3 py-2.5 rounded-lg transition cursor-pointer whitespace-nowrap"
             >
               Abaikan
@@ -350,7 +412,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
       )}
 
       {/* Status Utama: Terkunci / Menunggu Admin / Siap Input Nama */}
-      {hasPlayedThisDevice ? (
+      {effectiveLocked ? (
         <div className="bg-[#0B1120] border border-amber-400/30 rounded-xl p-5 text-center mb-6">
           <div className="w-11 h-11 rounded-full bg-amber-400/15 text-amber-300 flex items-center justify-center mx-auto mb-2.5">
             <Lock className="w-5 h-5" />
@@ -380,12 +442,19 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
         </div>
       ) : (
         <div className="max-w-lg mx-auto mb-6">
-          <label
-            htmlFor="player-name"
-            className="block text-xs sm:text-sm font-semibold text-slate-300 mb-2"
-          >
-            Nama Pemain / Tim
-          </label>
+          <div className="flex items-center justify-between mb-2">
+            <label
+              htmlFor="player-name"
+              className="block text-xs sm:text-sm font-semibold text-slate-300"
+            >
+              Nama Pemain / Tim
+            </label>
+            {settings.allowReplay && hasPlayedThisDevice && (
+              <span className="text-[11px] font-semibold text-emerald-400">
+                Mode Latihan aktif · Boleh main ulang
+              </span>
+            )}
+          </div>
           <input
             id="player-name"
             type="text"
@@ -408,7 +477,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
 
       {/* Aksi Utama */}
       <div className="flex flex-col sm:flex-row justify-center gap-3 max-w-lg mx-auto">
-        {hasPlayedThisDevice ? (
+        {effectiveLocked ? (
           <button
             type="button"
             disabled
@@ -425,12 +494,13 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
             <SpinningHourglassIcon className="w-4 h-4" /> Menunggu Admin...
           </button>
         ) : (
-          <motion.button
+          <button
             type="button"
-            whileHover={{ y: -1 }}
-            whileTap={{ scale: 0.985 }}
-            onClick={onStartClick}
-            className="flex-1 bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-sm sm:text-base py-3.5 px-6 rounded-xl transition-colors cursor-pointer inline-flex items-center justify-center gap-2 whitespace-nowrap"
+            onClick={() => {
+              playPopClickFx();
+              onStartClick();
+            }}
+            className="arcade-btn-amber flex-1 bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-sm sm:text-base py-3.5 px-6 rounded-xl cursor-pointer inline-flex items-center justify-center gap-2 whitespace-nowrap"
           >
             {sessionMode === 'live_waiting' ? (
               <>
@@ -438,22 +508,26 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
               </>
             ) : (
               <>
-                <Play className="w-4 h-4 fill-current" /> Mulai Kuis Sekarang
+                <Play className="w-4 h-4 fill-current" />{' '}
+                {hasPlayedThisDevice && settings.allowReplay
+                  ? 'Main Lagi Sekarang'
+                  : 'Mulai Kuis Sekarang'}
               </>
             )}
-          </motion.button>
+          </button>
         )}
 
         {(leaderboardCount > 0 || hasPlayedThisDevice) && (
-          <motion.button
+          <button
             type="button"
-            whileHover={{ y: -1 }}
-            whileTap={{ scale: 0.985 }}
-            onClick={onOpenLeaderboard}
-            className="bg-[#0B1120] hover:bg-slate-800 text-slate-100 font-semibold text-sm sm:text-base py-3.5 px-5 rounded-xl border border-[#23304C] transition-colors cursor-pointer inline-flex items-center justify-center gap-2 whitespace-nowrap"
+            onClick={() => {
+              playPopClickFx();
+              onOpenLeaderboard();
+            }}
+            className="arcade-btn bg-[#0B1120] hover:bg-slate-800 text-slate-100 font-semibold text-sm sm:text-base py-3.5 px-5 rounded-xl border border-[#23304C] cursor-pointer inline-flex items-center justify-center gap-2 whitespace-nowrap"
           >
             <Trophy className="w-4 h-4 text-amber-400" /> Lihat Leaderboard
-          </motion.button>
+          </button>
         )}
       </div>
     </motion.section>
