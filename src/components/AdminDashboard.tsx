@@ -4,6 +4,7 @@ import {
   AlertCircle,
   Check,
   CheckCircle2,
+  Clock,
   Code2,
   Copy,
   DoorOpen,
@@ -17,15 +18,20 @@ import {
   Plus,
   RotateCcw,
   Search,
+  Ship,
   SlidersHorizontal,
   Sparkles,
   Trash2,
+  Trophy,
   Unlock,
   Upload,
+  Users,
   X,
 } from 'lucide-react';
 import {
+  aggregateTeamLeaderboard,
   buildCsvContent,
+  buildVoyageCheckpoints,
   computeAdminStats,
   filterFreshActivePlayers,
   filterQuestionsForAdmin,
@@ -33,6 +39,7 @@ import {
   getCorrectAnswerDisplay,
   getDynamicCategoryStats,
   getSessionLockFlags,
+  mergeLiveAndFinishedLeaderboard,
   sanitizeImageUrl,
   sanitizeRoomCode,
 } from '../quiz/engine';
@@ -113,6 +120,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [roomDraft, setRoomDraft] = useState(roomCode);
   const [roomConfirmed, setRoomConfirmed] = useState(false);
   const [limitDraft, setLimitDraft] = useState(String(settings.questionLimit || 0));
+  const [durationDraft, setDurationDraft] = useState(
+    String(settings.quizDurationMinutes || 0)
+  );
+  const [adminLbTab, setAdminLbTab] = useState<'individual' | 'team'>(
+    'individual'
+  );
 
   useEffect(() => {
     setRoomDraft(roomCode);
@@ -125,6 +138,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   useEffect(() => {
     setLimitDraft(String(settings.questionLimit || 0));
   }, [settings.questionLimit]);
+
+  useEffect(() => {
+    setDurationDraft(String(settings.quizDurationMinutes || 0));
+  }, [settings.quizDurationMinutes]);
 
   // Bank Soal Search & Filter
   const [qSearch, setQSearch] = useState('');
@@ -198,6 +215,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         sortedLeaderboard
       ),
     [sessionMode, waitingPlayers, activePlayers, sortedLeaderboard]
+  );
+
+  const mergedAdminLeaderboard = useMemo(
+    () =>
+      mergeLiveAndFinishedLeaderboard(
+        sortedLeaderboard,
+        activePlayers,
+        questions.length
+      ),
+    [sortedLeaderboard, activePlayers, questions.length]
+  );
+
+  const teamAdminLeaderboard = useMemo(
+    () => aggregateTeamLeaderboard(mergedAdminLeaderboard),
+    [mergedAdminLeaderboard]
+  );
+
+  const effectiveDeckSize = useMemo(() => {
+    const lim = Math.max(0, Math.floor(Number(settings.questionLimit) || 0));
+    return lim > 0 && lim < questions.length ? lim : questions.length;
+  }, [questions.length, settings.questionLimit]);
+
+  const previewIslandCount = useMemo(
+    () => buildVoyageCheckpoints(effectiveDeckSize).length,
+    [effectiveDeckSize]
   );
 
   const googleSitesHtml = useMemo(
@@ -864,6 +906,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <div className="min-w-0">
                       <div className="font-bold text-white truncate">
                         {ap.name}
+                        {ap.teamName ? (
+                          <span className="ml-1 text-[11px] text-sky-300">
+                            ({ap.teamName})
+                          </span>
+                        ) : null}
                       </div>
                       <div className="text-[11px] text-slate-400 font-mono-num">
                         Soal {ap.currentQuestion || 1}/
@@ -879,6 +926,121 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             )}
           </div>
 
+          {/* Klasemen Live di Panel Admin */}
+          <div className="bg-[#0B1120] border border-[#23304C] rounded-xl p-5">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+              <div className="flex items-center gap-2">
+                <Trophy className="w-4 h-4 text-amber-400" />
+                <h3 className="text-sm font-bold text-white">
+                  Klasemen Leaderboard Live ({mergedAdminLeaderboard.length})
+                </h3>
+              </div>
+              <div className="inline-flex items-center gap-1 p-1 bg-[#131C31] border border-[#23304C] rounded-lg">
+                <button
+                  type="button"
+                  onClick={() => {
+                    playPopClickFx();
+                    setAdminLbTab('individual');
+                  }}
+                  className={`px-2.5 py-1 rounded text-[11px] font-bold cursor-pointer ${
+                    adminLbTab === 'individual'
+                      ? 'bg-amber-400 text-slate-950'
+                      : 'text-slate-300 hover:text-white'
+                  }`}
+                >
+                  Individu
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    playPopClickFx();
+                    setAdminLbTab('team');
+                  }}
+                  className={`px-2.5 py-1 rounded text-[11px] font-bold cursor-pointer inline-flex items-center gap-1 ${
+                    adminLbTab === 'team'
+                      ? 'bg-amber-400 text-slate-950'
+                      : 'text-slate-300 hover:text-white'
+                  }`}
+                >
+                  <Users className="w-3 h-3" /> Tim ({teamAdminLeaderboard.length})
+                </button>
+              </div>
+            </div>
+
+            {mergedAdminLeaderboard.length === 0 ? (
+              <p className="text-xs text-slate-500">
+                Belum ada skor peserta yang tercatat di ruangan ini.
+              </p>
+            ) : adminLbTab === 'individual' ? (
+              <div className="divide-y divide-[#23304C]/70 max-h-52 overflow-y-auto rounded-lg border border-[#23304C] bg-[#131C31]">
+                {mergedAdminLeaderboard.map((row, idx) => (
+                  <div
+                    key={row.deviceId}
+                    className="flex items-center justify-between gap-3 px-3.5 py-2 text-xs"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="font-mono-num font-extrabold text-amber-300 w-6 shrink-0">
+                        #{idx + 1}
+                      </span>
+                      <div className="min-w-0">
+                        <span className="font-bold text-white truncate">
+                          {row.name}
+                        </span>
+                        {row.teamName && (
+                          <span className="ml-1.5 text-[11px] text-sky-300">
+                            · Tim {row.teamName}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0 font-mono-num">
+                      <span
+                        className={`text-[11px] ${
+                          row.status === 'finished'
+                            ? 'text-emerald-400'
+                            : 'text-sky-300'
+                        }`}
+                      >
+                        {row.status === 'finished'
+                          ? `Selesai (${row.correct}/${row.totalQuestions})`
+                          : `Soal ${row.currentQuestion}/${row.totalQuestions}`}
+                      </span>
+                      <span className="font-extrabold text-amber-400 min-w-[40px] text-right">
+                        {row.score}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="divide-y divide-[#23304C]/70 max-h-52 overflow-y-auto rounded-lg border border-[#23304C] bg-[#131C31]">
+                {teamAdminLeaderboard.map((t, idx) => (
+                  <div
+                    key={t.teamName}
+                    className="flex items-center justify-between gap-3 px-3.5 py-2 text-xs"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="font-mono-num font-extrabold text-sky-300 w-6 shrink-0">
+                        #{idx + 1}
+                      </span>
+                      <div className="min-w-0">
+                        <div className="font-bold text-white truncate">
+                          {t.teamName}
+                        </div>
+                        <div className="text-[11px] text-slate-400 truncate">
+                          {t.memberCount} anggota · {t.members.join(', ')}
+                        </div>
+                      </div>
+                    </div>
+                    <span className="font-mono-num font-extrabold text-amber-400 shrink-0">
+                      {t.totalScore}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Pengaturan Kuis, Mode Latihan, Ruangan & PIN */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div className="bg-[#0B1120] border border-[#23304C] rounded-xl p-5 space-y-3">
@@ -886,6 +1048,194 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <SlidersHorizontal className="w-4 h-4 text-amber-400" />
                 <span>Pengaturan Kuis &amp; Tampilan</span>
               </div>
+
+              {/* Mode Gameplay: Klasik vs Berlayar Mencari Harta Karun */}
+              <div className="p-3 rounded-lg bg-[#131C31] border border-[#23304C] space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-xs font-bold text-white inline-flex items-center gap-1.5">
+                    <Ship className="w-3.5 h-3.5 text-sky-400" />
+                    <span>Mode Gameplay</span>
+                  </div>
+                  <span className="text-[11px] font-mono-num text-sky-300">
+                    {previewIslandCount} Pulau ({effectiveDeckSize} soal ÷ 5)
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playPopClickFx();
+                      onUpdateSettings({ ...settings, gameplayMode: 'classic' });
+                    }}
+                    className={`px-3 py-2 rounded-lg text-xs font-bold border cursor-pointer ${
+                      settings.gameplayMode !== 'voyage'
+                        ? 'bg-amber-400 text-slate-950 border-amber-300'
+                        : 'bg-[#0B1120] text-slate-300 border-[#23304C] hover:text-white'
+                    }`}
+                  >
+                    Kuis Klasik
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playPopClickFx();
+                      onUpdateSettings({ ...settings, gameplayMode: 'voyage' });
+                    }}
+                    className={`px-3 py-2 rounded-lg text-xs font-bold border cursor-pointer ${
+                      settings.gameplayMode === 'voyage'
+                        ? 'bg-sky-400 text-slate-950 border-sky-300'
+                        : 'bg-[#0B1120] text-slate-300 border-[#23304C] hover:text-white'
+                    }`}
+                  >
+                    Berlayar Harta Karun
+                  </button>
+                </div>
+                <p className="text-[11px] text-slate-400 leading-snug">
+                  Tiap 5 soal kapal maju 3 langkah &amp; berlabuh di pulau minigame
+                  untuk meraih Buff atau Debuff Puting Beliung.
+                </p>
+              </div>
+
+              {/* Kepesertaan Solo vs Tim */}
+              <div className="p-3 rounded-lg bg-[#131C31] border border-[#23304C] space-y-2">
+                <div className="text-xs font-bold text-white inline-flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Kepesertaan (Solo / Tim)</span>
+                </div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {(
+                    [
+                      { id: 'either', label: 'Bebas' },
+                      { id: 'solo', label: 'Solo Saja' },
+                      { id: 'team', label: 'Tim Saja' },
+                    ] as const
+                  ).map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => {
+                        playPopClickFx();
+                        onUpdateSettings({
+                          ...settings,
+                          participationMode: opt.id,
+                        });
+                      }}
+                      className={`px-2 py-1.5 rounded-lg text-[11px] font-bold border cursor-pointer ${
+                        (settings.participationMode || 'either') === opt.id
+                          ? 'bg-emerald-400 text-slate-950 border-emerald-300'
+                          : 'bg-[#0B1120] text-slate-300 border-[#23304C] hover:text-white'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Timer Kuis Global (Menit) */}
+              <div className="p-3 rounded-lg bg-[#131C31] border border-[#23304C] space-y-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <label
+                      htmlFor="admin-quiz-duration"
+                      className="text-xs font-bold text-white inline-flex items-center gap-1.5"
+                    >
+                      <Clock className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Timer Kuis Global (Menit)</span>
+                    </label>
+                    <span className="block text-[11px] text-slate-400 mt-0.5">
+                      Isi &gt; 0 (mis. 30 menit) untuk mematikan timer per-soal
+                      dan memakai 1 timer kuis gabungan.
+                    </span>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {[0, 15, 30, 45, 60].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => {
+                        playPopClickFx();
+                        setDurationDraft(String(preset));
+                        onUpdateSettings({
+                          ...settings,
+                          quizDurationMinutes: preset,
+                        });
+                        onNotify(
+                          preset === 0
+                            ? 'Timer dikembalikan ke hitungan per-soal.'
+                            : `Timer kuis global diatur ke ${preset} menit.`
+                        );
+                      }}
+                      className={`px-2.5 py-1 rounded text-[11px] font-mono-num font-bold border cursor-pointer ${
+                        Number(settings.quizDurationMinutes || 0) === preset
+                          ? 'bg-amber-400 text-slate-950 border-amber-300'
+                          : 'bg-[#0B1120] text-slate-300 border-[#23304C] hover:text-white'
+                      }`}
+                    >
+                      {preset === 0 ? 'Per-Soal' : `${preset}m`}
+                    </button>
+                  ))}
+                  <div className="flex items-center gap-1 ml-auto">
+                    <input
+                      id="admin-quiz-duration"
+                      type="number"
+                      min={0}
+                      max={180}
+                      value={durationDraft}
+                      onChange={(e) => setDurationDraft(e.target.value)}
+                      className="w-14 px-2 py-1 rounded bg-[#0B1120] border border-[#23304C] text-white text-xs font-mono-num font-bold text-center"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playPopClickFx();
+                        const val = Math.max(
+                          0,
+                          Math.min(180, Math.floor(Number(durationDraft) || 0))
+                        );
+                        setDurationDraft(String(val));
+                        onUpdateSettings({
+                          ...settings,
+                          quizDurationMinutes: val,
+                        });
+                        onNotify(
+                          val === 0
+                            ? 'Timer dikembalikan ke hitungan per-soal.'
+                            : `Timer kuis global diatur ke ${val} menit.`
+                        );
+                      }}
+                      className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-[11px] px-2.5 py-1 rounded cursor-pointer"
+                    >
+                      Set
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <label className="flex items-start justify-between gap-3 cursor-pointer p-2.5 rounded-lg bg-[#131C31] border border-[#23304C]">
+                <div>
+                  <div className="text-xs font-bold text-white">
+                    Tampilkan Leaderboard Live ke Pemain
+                  </div>
+                  <div className="text-[11px] text-slate-400">
+                    Izinkan peserta melihat klasemen sementara di Lobby &amp;
+                    saat kuis berlangsung.
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={Boolean(settings.showLiveLeaderboardToPlayers)}
+                  onChange={(e) => {
+                    playPopClickFx();
+                    onUpdateSettings({
+                      ...settings,
+                      showLiveLeaderboardToPlayers: e.target.checked,
+                    });
+                  }}
+                  className="mt-1 accent-amber-400 w-4 h-4 cursor-pointer"
+                />
+              </label>
 
               <label className="flex items-start justify-between gap-3 cursor-pointer p-2.5 rounded-lg bg-[#131C31] border border-[#23304C]">
                 <div>
@@ -1194,7 +1544,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           #{idx + 1}
                         </td>
                         <td className="py-3 px-4 font-bold text-white">
-                          {p.name}
+                          <div>{p.name}</div>
+                          {p.teamName && (
+                            <div className="text-[11px] text-sky-300 font-semibold">
+                              Tim {p.teamName}
+                            </div>
+                          )}
                         </td>
                         <td className="py-3 px-4 text-center font-mono-num text-emerald-400 font-bold">
                           {p.correct}/{p.totalQuestions || questions.length}

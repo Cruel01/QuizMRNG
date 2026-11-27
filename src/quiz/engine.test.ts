@@ -1,15 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  aggregateTeamLeaderboard,
   buildCsvContent,
+  buildVoyageCheckpoints,
   calculateEarnedPoints,
   computeAdminStats,
   evaluateAnswer,
+  formatCountdownClock,
   generateDefaultRoomCode,
   getDebuffMilestones,
   getSessionLockFlags,
   getStreakRewardTarget,
+  getVoyageProgressState,
   grantPowerupToSlots,
+  isGlobalQuizTimerActive,
+  mergeLiveAndFinishedLeaderboard,
   pickSabotageTarget,
   rollWeightedPowerup,
   sanitizeRoomCode,
@@ -45,11 +51,72 @@ test('evaluateAnswer handles MC, TF, MS, and normalized TEXT answers', () => {
   assert.equal(evaluateAnswer(txt, 'tulang kering').isCorrect, false);
 });
 
-test('calculateEarnedPoints computes speed bonus and 2x multiplier', () => {
+test('calculateEarnedPoints computes speed bonus, global timer flat curve, and 2x multiplier', () => {
   assert.equal(calculateEarnedPoints(false, 20, 25, true), 0);
   assert.equal(calculateEarnedPoints(true, 25, 25, false), 1000);
   assert.equal(calculateEarnedPoints(true, 25, 25, true), 2000);
   assert.equal(calculateEarnedPoints(true, 0, 25, false), 600);
+  // Global timer mode gives 850 base + up to 150 pace bonus
+  assert.equal(calculateEarnedPoints(true, 1800, 1800, false, true), 1000);
+  assert.equal(calculateEarnedPoints(true, 0, 1800, false, true), 850);
+  assert.equal(calculateEarnedPoints(true, 0, 1800, true, true), 1700);
+});
+
+test('isGlobalQuizTimerActive & formatCountdownClock behave accurately', () => {
+  assert.equal(isGlobalQuizTimerActive('free', { quizDurationMinutes: 0 }), false);
+  assert.equal(isGlobalQuizTimerActive('unconfigured', { quizDurationMinutes: 30 }), false);
+  assert.equal(isGlobalQuizTimerActive('live_started', { quizDurationMinutes: 30 }), true);
+  assert.equal(isGlobalQuizTimerActive('free', { quizDurationMinutes: 15 }), true);
+
+  assert.equal(formatCountdownClock(1800), '30:00');
+  assert.equal(formatCountdownClock(65), '01:05');
+  assert.equal(formatCountdownClock(-5), '00:00');
+});
+
+test('buildVoyageCheckpoints scales islands cleanly as totalQuestions / 5', () => {
+  const cp30 = buildVoyageCheckpoints(30);
+  assert.equal(cp30.length, 6);
+  assert.deepEqual(
+    cp30.map((c) => c.questionNumber),
+    [5, 10, 15, 20, 25, 30]
+  );
+
+  const cp12 = buildVoyageCheckpoints(12);
+  assert.equal(cp12.length, 2);
+  assert.deepEqual(
+    cp12.map((c) => c.questionNumber),
+    [5, 10]
+  );
+
+  const cp3 = buildVoyageCheckpoints(3);
+  assert.equal(cp3.length, 1);
+  assert.equal(cp3[0].questionNumber, 3);
+});
+
+test('getVoyageProgressState advances through 3 steps per 5-question leg and docks at island', () => {
+  const s0 = getVoyageProgressState(0, 30);
+  assert.equal(s0.legStep, 0);
+  assert.equal(s0.dockedIsland, null);
+  assert.equal(s0.completedIslands, 0);
+
+  const s1 = getVoyageProgressState(1, 30);
+  assert.equal(s1.legStep, 1);
+  assert.equal(s1.dockedIsland, null);
+
+  const s3 = getVoyageProgressState(3, 30);
+  assert.equal(s3.legStep, 2);
+  assert.equal(s3.dockedIsland, null);
+
+  const s5 = getVoyageProgressState(5, 30);
+  assert.equal(s5.legStep, 3);
+  assert.equal(s5.completedIslands, 1);
+  assert.equal(s5.dockedIsland?.islandNumber, 1);
+  assert.equal(s5.dockedIsland?.name, 'Pulau Rempah Maluku');
+
+  const s6 = getVoyageProgressState(6, 30);
+  assert.equal(s6.currentLegIndex, 1);
+  assert.equal(s6.legStep, 1);
+  assert.equal(s6.dockedIsland, null);
 });
 
 test('grantPowerupToSlots caps at 2 slots and converts overflow to +50 pts', () => {
@@ -67,11 +134,92 @@ test('grantPowerupToSlots caps at 2 slots and converts overflow to +50 pts', () 
   assert.deepEqual(step3.nextInventory, ['SHIELD', 'DOUBLE_SCORE']);
 });
 
-test('rollWeightedPowerup filters by kind and returns valid IDs', () => {
+test('rollWeightedPowerup filters by kind and includes TORNADO debuff', () => {
   const buff = rollWeightedPowerup('buff', () => 0.5);
   assert.ok(['DOUBLE_SCORE', 'FIFTY_FIFTY', 'SHIELD'].includes(buff));
-  const debuff = rollWeightedPowerup('debuff', () => 0.1);
-  assert.ok(['FREEZE_LEADER', 'GLITCH_SHUFFLE'].includes(debuff));
+  const debuffLow = rollWeightedPowerup('debuff', () => 0.1);
+  const debuffHigh = rollWeightedPowerup('debuff', () => 0.99);
+  assert.ok(['FREEZE_LEADER', 'GLITCH_SHUFFLE', 'TORNADO'].includes(debuffLow));
+  assert.equal(debuffHigh, 'TORNADO');
+});
+
+test('aggregateTeamLeaderboard & mergeLiveAndFinishedLeaderboard combine solo/team and active/finished players', () => {
+  const finished: PlayerRecord[] = [
+    {
+      id: 'P1',
+      deviceId: 'D1',
+      name: 'Budi',
+      teamName: 'Garuda',
+      score: 2000,
+      correct: 3,
+      totalQuestions: 5,
+      history: [],
+      completedAt: '',
+    },
+    {
+      id: 'P2',
+      deviceId: 'D2',
+      name: 'Sari',
+      teamName: 'Garuda',
+      score: 1500,
+      correct: 2,
+      totalQuestions: 5,
+      history: [],
+      completedAt: '',
+    },
+    {
+      id: 'P3',
+      deviceId: 'D3',
+      name: 'Andi',
+      score: 1800,
+      correct: 3,
+      totalQuestions: 5,
+      history: [],
+      completedAt: '',
+    },
+  ];
+  const now = 1_000_000_000;
+  const active: ActivePlayer[] = [
+    {
+      deviceId: 'D1',
+      name: 'Budi',
+      teamName: 'Garuda',
+      mode: 'live_started',
+      score: 900,
+      currentQuestion: 2,
+      totalQuestions: 5,
+      startedAt: now,
+      lastSeen: now,
+    },
+    {
+      deviceId: 'D4',
+      name: 'Citra',
+      teamName: 'Elang',
+      mode: 'live_started',
+      score: 2500,
+      currentQuestion: 4,
+      totalQuestions: 5,
+      startedAt: now,
+      lastSeen: now,
+    },
+  ];
+
+  const merged = mergeLiveAndFinishedLeaderboard(finished, active, 5, now);
+  assert.equal(merged.length, 4);
+  assert.equal(merged[0].name, 'Citra');
+  assert.equal(merged[0].status, 'playing');
+  // Finished D1 overrides stale active D1
+  const budi = merged.find((r) => r.deviceId === 'D1');
+  assert.equal(budi?.status, 'finished');
+  assert.equal(budi?.score, 2000);
+
+  const teams = aggregateTeamLeaderboard(merged);
+  assert.equal(teams[0].teamName, 'Garuda');
+  assert.equal(teams[0].memberCount, 2);
+  assert.equal(teams[0].totalScore, 3500);
+  assert.equal(teams[0].avgScore, 1750);
+  assert.equal(teams[1].teamName, 'Elang');
+  assert.equal(teams[2].isSolo, true);
 });
 
 test('pickSabotageTarget prioritizes fresh active in-game leader over finished leaderboard', () => {
@@ -114,12 +262,13 @@ test('getSessionLockFlags ignores stale active players and locks opposing modes 
   assert.equal(lockedLive.isFreeLockedOut, false);
 });
 
-test('computeAdminStats & buildCsvContent format metrics and handle # safely', () => {
+test('computeAdminStats & buildCsvContent format metrics, team column, and handle # safely', () => {
   const records: PlayerRecord[] = [
     {
       id: 'D1',
       deviceId: 'D1',
       name: 'Sari "Pro"',
+      teamName: 'Garuda',
       score: 1800,
       correct: 2,
       totalQuestions: 2,
@@ -160,12 +309,13 @@ test('computeAdminStats & buildCsvContent format metrics and handle # safely', (
   assert.equal(stats.avgCorrectPct, 100);
 
   const csv = buildCsvContent(records, DEFAULT_QUESTIONS.slice(0, 2));
-  assert.ok(csv.startsWith('\uFEFFRank,Nama Peserta'));
+  assert.ok(csv.startsWith('\uFEFFRank,Nama Peserta,Tim,'));
   assert.ok(csv.includes('"Sari ""Pro"""'));
+  assert.ok(csv.includes('"Garuda"'));
   assert.ok(csv.includes('No.2 (2d)'));
 });
 
-test('generateGoogleSitesHtml embeds current questions, full parity UX, Admin 3-tab CSV import, and excludes Publish & Embed', () => {
+test('generateGoogleSitesHtml embeds current questions, Voyage/Timer/Tornado parity, Admin 3-tab CSV import, and excludes Publish & Embed', () => {
   const html = generateGoogleSitesHtml(
     DEFAULT_QUESTIONS,
     {
@@ -175,6 +325,10 @@ test('generateGoogleSitesHtml embeds current questions, full parity UX, Admin 3-
       questionLimit: 10,
       compactMode: false,
       adminPin: '9988',
+      quizDurationMinutes: 30,
+      gameplayMode: 'voyage',
+      participationMode: 'either',
+      showLiveLeaderboardToPlayers: true,
     },
     'KELAS8A'
   );
@@ -200,6 +354,16 @@ test('generateGoogleSitesHtml embeds current questions, full parity UX, Admin 3-
   assert.ok(html.includes('setting-allow-replay'));
   assert.ok(html.includes('setting-question-limit'));
   assert.ok(html.includes('modal-confirm-action'));
+
+  // Global Timer, Voyage Harta Karun, Puting Beliung, Solo/Tim, Live Leaderboard parity
+  assert.ok(html.includes('Berlayar Harta Karun'));
+  assert.ok(html.includes('Puting Beliung'));
+  assert.ok(html.includes('modal-island-minigame'));
+  assert.ok(html.includes('modal-live-leaderboard'));
+  assert.ok(html.includes('voyage-roadmap-box'));
+  assert.ok(html.includes('tornado-banner'));
+  assert.ok(html.includes('Timer Kuis Global'));
+  assert.ok(html.includes('Klasemen Leaderboard Live'));
 
   // Admin Step 1 (Room Priority) & Step 2 (Mode Pelaksanaan lock)
   assert.ok(html.includes('admin-current-room-display'));

@@ -9,9 +9,11 @@ import {
   RotateCcw,
   Scissors,
   Shield,
+  Ship,
   Shuffle,
   Snowflake,
   Tag,
+  Tornado,
   Trophy,
   Users,
   Volume2,
@@ -40,6 +42,8 @@ interface LobbyScreenProps {
   settings: QuizSettings;
   roomCode: string;
   playerName: string;
+  teamModeChoice: 'solo' | 'team';
+  teamName: string;
   nameError: string;
   hasPlayedThisDevice: boolean;
   savedPlayerRecord: PlayerRecord | null;
@@ -49,6 +53,8 @@ interface LobbyScreenProps {
   onToggleMute: () => void;
   onOpenRoomModal: () => void;
   onPlayerNameChange: (val: string) => void;
+  onTeamModeChoiceChange: (mode: 'solo' | 'team') => void;
+  onTeamNameChange: (val: string) => void;
   onStartClick: () => void;
   onResumeProgress: () => void;
   onDiscardProgress: () => void;
@@ -67,6 +73,8 @@ function renderPowerupGlyph(id: PowerupId) {
       return <Snowflake className="w-4 h-4 text-cyan-300 shrink-0" />;
     case 'GLITCH_SHUFFLE':
       return <Shuffle className="w-4 h-4 text-fuchsia-300 shrink-0" />;
+    case 'TORNADO':
+      return <Tornado className="w-4 h-4 text-rose-300 shrink-0" />;
   }
 }
 
@@ -76,6 +84,8 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
   settings,
   roomCode,
   playerName,
+  teamModeChoice,
+  teamName,
   nameError,
   hasPlayedThisDevice,
   savedPlayerRecord,
@@ -85,6 +95,8 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
   onToggleMute,
   onOpenRoomModal,
   onPlayerNameChange,
+  onTeamModeChoiceChange,
+  onTeamNameChange,
   onStartClick,
   onResumeProgress,
   onDiscardProgress,
@@ -157,7 +169,17 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
               <span className="font-mono-num text-slate-200 font-semibold">
                 {activeQuestionTarget}
               </span>{' '}
-              pertanyaan · Buff &amp; Debuff real-time
+              pertanyaan ·{' '}
+              {settings.gameplayMode === 'voyage' ? (
+                <span className="text-sky-300 font-semibold inline-flex items-center gap-1">
+                  <Ship className="w-3.5 h-3.5 inline" /> Berlayar Harta Karun
+                </span>
+              ) : (
+                'Buff & Debuff real-time'
+              )}
+              {settings.quizDurationMinutes > 0
+                ? ` · Timer Global ${settings.quizDurationMinutes} Menit`
+                : ''}
               {settings.allowReplay ? ' · Mode Latihan' : ''}
               {settings.shuffleQuestions ? ' · Soal Acak' : ''}
             </p>
@@ -250,7 +272,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                 : 'text-slate-300 hover:text-white'
             }`}
           >
-            Buff &amp; Debuff (5)
+            Buff &amp; Debuff ({Object.keys(POWERUP_CATALOG).length})
           </button>
         </div>
 
@@ -441,34 +463,107 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
           </p>
         </div>
       ) : (
-        <div className="max-w-lg mx-auto mb-6">
-          <div className="flex items-center justify-between mb-2">
-            <label
-              htmlFor="player-name"
-              className="block text-xs sm:text-sm font-semibold text-slate-300"
-            >
-              Nama Pemain / Tim
-            </label>
-            {settings.allowReplay && hasPlayedThisDevice && (
-              <span className="text-[11px] font-semibold text-emerald-400">
-                Mode Latihan aktif · Boleh main ulang
+        <div className="max-w-lg mx-auto mb-6 space-y-3">
+          {settings.participationMode === 'either' && (
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold text-slate-300">
+                Bentuk Kepesertaan
               </span>
-            )}
+              <div className="inline-flex items-center gap-1 p-1 bg-[#0B1120] border border-[#23304C] rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => {
+                    playPopClickFx();
+                    onTeamModeChoiceChange('solo');
+                  }}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold cursor-pointer ${
+                    teamModeChoice === 'solo'
+                      ? 'bg-amber-400 text-slate-950'
+                      : 'text-slate-300 hover:text-white'
+                  }`}
+                >
+                  Solo
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    playPopClickFx();
+                    onTeamModeChoiceChange('team');
+                  }}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold cursor-pointer ${
+                    teamModeChoice === 'team'
+                      ? 'bg-sky-400 text-slate-950'
+                      : 'text-slate-300 hover:text-white'
+                  }`}
+                >
+                  Tim / Kru
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label
+                htmlFor="player-name"
+                className="block text-xs sm:text-sm font-semibold text-slate-300"
+              >
+                {settings.participationMode === 'team' ||
+                (settings.participationMode === 'either' &&
+                  teamModeChoice === 'team')
+                  ? 'Nama Pelaut / Anggota'
+                  : 'Nama Pemain'}
+              </label>
+              {settings.allowReplay && hasPlayedThisDevice && (
+                <span className="text-[11px] font-semibold text-emerald-400">
+                  Mode Latihan aktif · Boleh main ulang
+                </span>
+              )}
+            </div>
+            <input
+              id="player-name"
+              type="text"
+              value={playerName}
+              maxLength={20}
+              placeholder="Masukkan namamu di sini..."
+              onChange={(e) => onPlayerNameChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') onStartClick();
+              }}
+              className="w-full px-4 py-3.5 rounded-xl bg-white text-slate-950 font-bold text-base sm:text-lg placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400"
+            />
           </div>
-          <input
-            id="player-name"
-            type="text"
-            value={playerName}
-            maxLength={20}
-            placeholder="Masukkan namamu di sini..."
-            onChange={(e) => onPlayerNameChange(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') onStartClick();
-            }}
-            className="w-full px-4 py-3.5 rounded-xl bg-white text-slate-950 font-bold text-base sm:text-lg placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400"
-          />
+
+          {(settings.participationMode === 'team' ||
+            (settings.participationMode === 'either' &&
+              teamModeChoice === 'team')) && (
+            <div>
+              <label
+                htmlFor="player-team-name"
+                className="block text-xs sm:text-sm font-semibold text-sky-300 mb-1.5"
+              >
+                Nama Tim / Kapal{' '}
+                {settings.participationMode === 'team'
+                  ? '(Wajib)'
+                  : '(Opsional)'}
+              </label>
+              <input
+                id="player-team-name"
+                type="text"
+                value={teamName}
+                maxLength={20}
+                placeholder="Contoh: Bajak Laut Garuda"
+                onChange={(e) => onTeamNameChange(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') onStartClick();
+                }}
+                className="w-full px-4 py-3 rounded-xl bg-[#0B1120] border border-sky-400/50 text-white font-bold text-sm sm:text-base placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-400"
+              />
+            </div>
+          )}
+
           {nameError && (
-            <p className="text-rose-400 text-xs mt-1.5 font-medium" role="alert">
+            <p className="text-rose-400 text-xs mt-1 font-medium" role="alert">
               {nameError}
             </p>
           )}
@@ -517,7 +612,9 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
           </button>
         )}
 
-        {(leaderboardCount > 0 || hasPlayedThisDevice) && (
+        {(leaderboardCount > 0 ||
+          hasPlayedThisDevice ||
+          settings.showLiveLeaderboardToPlayers) && (
           <button
             type="button"
             onClick={() => {

@@ -189,8 +189,48 @@
   }
 }
 
+@keyframes tornadoStorm {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  15% {
+    transform: translate3d(-6px, -2px, 0) rotate(-1.2deg);
+  }
+  30% {
+    transform: translate3d(6px, 2px, 0) rotate(1.3deg);
+  }
+  45% {
+    transform: translate3d(-5px, 2px, 0) rotate(-0.9deg);
+  }
+  60% {
+    transform: translate3d(5px, -2px, 0) rotate(1deg);
+  }
+  75% {
+    transform: translate3d(-3px, 1px, 0) rotate(-0.6deg);
+  }
+}
+
+@keyframes shipBob {
+  0%,
+  100% {
+    transform: translateY(0px) rotate(-2deg);
+  }
+  50% {
+    transform: translateY(-3px) rotate(3deg);
+  }
+}
+
 .glitch-active {
   animation: glitchShake 0.35s ease-in-out 2;
+}
+
+.tornado-storm-active {
+  animation: tornadoStorm 0.55s ease-in-out infinite;
+}
+
+.anim-ship-bob {
+  animation: shipBob 2.1s ease-in-out infinite;
 }
 
 .anim-hourglass-flip {
@@ -230,6 +270,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .glitch-active,
+  .tornado-storm-active,
+  .anim-ship-bob,
   .anim-hourglass-flip,
   .anim-sand-drop,
   .anim-radar-ping,

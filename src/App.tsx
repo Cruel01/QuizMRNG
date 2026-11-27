@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { MotionConfig } from 'motion/react';
 import { DoorOpen, ShieldCheck, X } from 'lucide-react';
 import { AdminDashboard } from './components/AdminDashboard';
+import { IslandMinigameModal, type IslandMinigameReward } from './components/IslandMinigameModal';
 import { LeaderboardScreen } from './components/LeaderboardScreen';
+import { LiveLeaderboardModal } from './components/LiveLeaderboardModal';
 import { LobbyScreen } from './components/LobbyScreen';
 import { QuizScreen, type QuestionFeedbackState } from './components/QuizScreen';
 import { WaitingRoomScreen } from './components/WaitingRoomScreen';
@@ -15,7 +17,9 @@ import {
   getOrCreateDeviceId,
   getSessionLockFlags,
   getStreakRewardTarget,
+  getVoyageProgressState,
   grantPowerupToSlots,
+  isGlobalQuizTimerActive,
   pickSabotageTarget,
   prepareQuizDeck,
   rollWeightedPowerup,
@@ -52,9 +56,11 @@ import {
   playCountdownTickFx,
   playFinishFx,
   playFreezeFx,
+  playIslandDockFx,
   playPopClickFx,
   playPowerupFx,
   playStreakComboFx,
+  playTornadoFx,
   playUrgentTickFx,
   playWrongFx,
   setSoundMuted,
@@ -71,6 +77,7 @@ import type {
   SabotageEvent,
   ScreenName,
   SessionMode,
+  VoyageCheckpoint,
   WaitingPlayer,
 } from './quiz/types';
 
@@ -191,10 +198,13 @@ export default function App() {
   // Navigation & UI state
   const [screen, setScreen] = useState<ScreenName>('lobby');
   const [playerName, setPlayerName] = useState('');
+  const [teamModeChoice, setTeamModeChoice] = useState<'solo' | 'team'>('solo');
+  const [teamName, setTeamName] = useState('');
   const [nameError, setNameError] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState(() => getSoundMuted());
   const [showConfetti, setShowConfetti] = useState(false);
+  const [liveLbModalOpen, setLiveLbModalOpen] = useState(false);
 
   // Admin & Room modal state
   const [adminModalOpen, setAdminModalOpen] = useState(false);
@@ -212,6 +222,8 @@ export default function App() {
   const [score, setScore] = useState(0);
   const [correctCount, setCorrectCount] = useState(0);
   const [timeLeft, setTimeLeft] = useState(25);
+  const [globalTimeLeft, setGlobalTimeLeft] = useState(0);
+  const [totalGlobalSeconds, setTotalGlobalSeconds] = useState(0);
   const [playerHistory, setPlayerHistory] = useState<QuestionHistoryItem[]>([]);
   const [powerupInventory, setPowerupInventory] = useState<(PowerupId | null)[]>([
     null,
@@ -227,10 +239,17 @@ export default function App() {
     []
   );
 
-  // Freeze state
+  // Voyage & Island Minigame state
+  const [dockedIslandModal, setDockedIslandModal] =
+    useState<VoyageCheckpoint | null>(null);
+  const [visitedIslands, setVisitedIslands] = useState<number[]>([]);
+
+  // Freeze & Tornado debuff state
   const [isFrozen, setIsFrozen] = useState(false);
   const [freezeCountdown, setFreezeCountdown] = useState(0);
   const [freezeAttackerName, setFreezeAttackerName] = useState('');
+  const [tornadoCountdown, setTornadoCountdown] = useState(0);
+  const [tornadoAttackerName, setTornadoAttackerName] = useState('');
 
   // Question interaction state
   const [optionOrder, setOptionOrder] = useState<number[]>([0, 1, 2, 3]);
@@ -248,8 +267,30 @@ export default function App() {
   screenRef.current = screen;
   const immuneRef = useRef(immuneQuestionsRemaining);
   immuneRef.current = immuneQuestionsRemaining;
+  const feedbackRef = useRef(feedback);
+  feedbackRef.current = feedback;
+  const playDeckRef = useRef(playDeck);
+  playDeckRef.current = playDeck;
+  const currentQIdxRef = useRef(currentQuestionIndex);
+  currentQIdxRef.current = currentQuestionIndex;
   const toastTimerRef = useRef<number | null>(null);
   const isAutostartDemoRef = useRef(false);
+
+  const isGlobalTimer = useMemo(
+    () => isGlobalQuizTimerActive(sessionMode, settings),
+    [sessionMode, settings]
+  );
+
+  const resolvedTeamName = useMemo(() => {
+    if (settings.participationMode === 'solo') return '';
+    if (settings.participationMode === 'team') return teamName.trim();
+    return teamModeChoice === 'team' ? teamName.trim() : '';
+  }, [settings.participationMode, teamModeChoice, teamName]);
+
+  const voyageProgress = useMemo(() => {
+    if (settings.gameplayMode !== 'voyage') return null;
+    return getVoyageProgressState(playerHistory.length, playDeck.length);
+  }, [settings.gameplayMode, playerHistory.length, playDeck.length]);
 
   const notify = useCallback((msg: string) => {
     setToastMessage(msg);
@@ -333,17 +374,30 @@ export default function App() {
       modeUsed: SessionMode,
       runIdUsed: string,
       localOnly = false,
-      skipCountdown = false
+      skipCountdown = false,
+      settingsOverride?: QuizSettings,
+      teamOverride?: string
     ) => {
+      const activeSettings = settingsOverride || settings;
+      const effectiveTeam =
+        teamOverride !== undefined ? teamOverride : resolvedTeamName;
       const sourceList = questions.length > 0 ? questions : DEFAULT_QUESTIONS;
-      const deck = prepareQuizDeck(sourceList, settings);
+      const deck = prepareQuizDeck(sourceList, activeSettings);
       setPlayDeck(deck);
+
+      const globalEnabled = isGlobalQuizTimerActive(modeUsed, activeSettings);
+      const initialGlobalSecs = globalEnabled
+        ? Math.max(60, Math.round((activeSettings.quizDurationMinutes || 0) * 60))
+        : 0;
+      setTotalGlobalSeconds(initialGlobalSecs);
+      setGlobalTimeLeft(initialGlobalSecs);
 
       if (!localOnly) {
         leaveWaitingRoomCloud(deviceId);
         upsertActivePlayerCloud({
           deviceId,
           name,
+          teamName: effectiveTeam || undefined,
           mode: modeUsed,
           score: 0,
           currentQuestion: 1,
@@ -365,6 +419,10 @@ export default function App() {
       setGlitchShuffleForNext(false);
       setIsFrozen(false);
       setFreezeCountdown(0);
+      setTornadoCountdown(0);
+      setTornadoAttackerName('');
+      setDockedIslandModal(null);
+      setVisitedIslands([]);
       setRecoverableProgress(null);
       setShowConfetti(false);
 
@@ -384,6 +442,7 @@ export default function App() {
           JSON.stringify({
             deviceId,
             playerName: name,
+            teamName: effectiveTeam || undefined,
             runId: runIdUsed,
             roomCode,
             questionIds: deck.map((q) => q.id || q.question),
@@ -396,12 +455,22 @@ export default function App() {
             immuneQuestionsRemaining: 0,
             awardedDebuffMilestones: [],
             glitchShuffleActiveForNext: false,
+            globalTimeLeftSeconds: initialGlobalSecs || undefined,
+            visitedIslands: [],
             savedAt: Date.now(),
           } satisfies InProgressState)
         );
       }
     },
-    [deviceId, inProgressKey, prepareQuestionView, questions, roomCode, settings]
+    [
+      deviceId,
+      inProgressKey,
+      prepareQuestionView,
+      questions,
+      resolvedTeamName,
+      roomCode,
+      settings,
+    ]
   );
 
   // Support ?autostart=1 for automated testing & quick local preview launch
@@ -410,8 +479,36 @@ export default function App() {
       const params = new URLSearchParams(window.location.search);
       if (params.get('autostart') === '1') {
         isAutostartDemoRef.current = true;
+        const voyageFlag = params.get('voyage') === '1';
+        const timerParam = Number(params.get('timer') || 0);
+        const teamParam = (params.get('team') || '').trim();
+        const showLbParam = params.get('live_lb') === '1';
+
+        const demoSettings: QuizSettings = {
+          ...settings,
+          gameplayMode: voyageFlag ? 'voyage' : settings.gameplayMode,
+          quizDurationMinutes:
+            Number.isFinite(timerParam) && timerParam > 0
+              ? timerParam
+              : settings.quizDurationMinutes,
+          showLiveLeaderboardToPlayers:
+            showLbParam || settings.showLiveLeaderboardToPlayers,
+        };
+        if (teamParam) {
+          setTeamModeChoice('team');
+          setTeamName(teamParam);
+        }
+        setSettings(demoSettings);
         setSessionMode('free');
-        startGameplay('Pemain Uji', 'free', 'autostart', true, true);
+        startGameplay(
+          'Pemain Uji',
+          'free',
+          'autostart',
+          true,
+          true,
+          demoSettings,
+          teamParam
+        );
       }
     } catch {
       // ignore
@@ -472,6 +569,7 @@ export default function App() {
         setLiveRunId(s.runId || 'default');
       },
       onSettingsUpdate: (cloudSettings) => {
+        if (isAutostartDemoRef.current) return;
         const merged: QuizSettings = {
           ...DEFAULT_QUIZ_SETTINGS,
           ...cloudSettings,
@@ -510,6 +608,21 @@ export default function App() {
           notify(
             `Opsi jawabanmu akan diacak oleh ${ev.attackerName || 'lawan'} pada soal berikutnya!`
           );
+        } else if (ev.type === 'TORNADO') {
+          playTornadoFx();
+          setTornadoCountdown(5);
+          setTornadoAttackerName(ev.attackerName || 'Pemain lain');
+          const curQ = playDeckRef.current[currentQIdxRef.current];
+          if (
+            !feedbackRef.current &&
+            curQ &&
+            (curQ.type === 'MC' || curQ.type === 'MS')
+          ) {
+            setOptionOrder(computeShuffledOrder((curQ.options || []).length, true));
+          }
+          notify(
+            `Angin Puting Beliung dari ${ev.attackerName || 'lawan'} mengguncang dek kapal selama 5 detik!`
+          );
         }
       },
     });
@@ -538,7 +651,7 @@ export default function App() {
     startGameplay,
   ]);
 
-  // Freeze countdown timer
+  // Freeze & Tornado countdown timers
   useEffect(() => {
     if (!isFrozen) return;
     const interval = window.setInterval(() => {
@@ -554,6 +667,20 @@ export default function App() {
     return () => window.clearInterval(interval);
   }, [isFrozen]);
 
+  useEffect(() => {
+    if (tornadoCountdown <= 0) return;
+    const interval = window.setInterval(() => {
+      setTornadoCountdown((prev) => {
+        if (prev <= 1) {
+          window.clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, [tornadoCountdown > 0]);
+
   // Finalize current question result
   const finalizeQuestion = useCallback(
     (
@@ -565,16 +692,22 @@ export default function App() {
       const q = playDeck[currentQuestionIndex];
       if (!q) return;
 
-      const totalTime = q.time || 25;
+      const totalTime = isGlobalTimer
+        ? Math.max(1, totalGlobalSeconds)
+        : q.time || 25;
+      const remainingForCalc = isGlobalTimer ? globalTimeLeft : timeLeft;
       const timeTaken = isTimeout
         ? totalTime
-        : Math.max(1, totalTime - timeLeft);
+        : isGlobalTimer
+          ? Math.max(1, Math.min(q.time || 25, 25))
+          : Math.max(1, totalTime - timeLeft);
 
       const earned = calculateEarnedPoints(
         isCorrect,
-        timeLeft,
+        remainingForCalc,
         totalTime,
-        doubleScoreActive
+        doubleScoreActive,
+        isGlobalTimer
       );
 
       let nextScore = score + earned;
@@ -621,7 +754,7 @@ export default function App() {
         correctAnswer: correctAnswerText,
         isCorrect,
         timeTaken,
-        maxTime: totalTime,
+        maxTime: q.time || 25,
         pointsEarned: earned,
         explanation: q.explanation,
       };
@@ -646,6 +779,7 @@ export default function App() {
         upsertActivePlayerCloud({
           deviceId,
           name: playerName,
+          teamName: resolvedTeamName || undefined,
           mode: sessionMode,
           score: nextScore,
           currentQuestion: currentQuestionIndex + 1,
@@ -659,6 +793,7 @@ export default function App() {
           JSON.stringify({
             deviceId,
             playerName,
+            teamName: resolvedTeamName || undefined,
             runId: liveRunId,
             roomCode,
             questionIds: playDeck.map((item) => item.id || item.question),
@@ -671,6 +806,8 @@ export default function App() {
             immuneQuestionsRemaining,
             awardedDebuffMilestones,
             glitchShuffleActiveForNext: glitchShuffleForNext,
+            globalTimeLeftSeconds: isGlobalTimer ? globalTimeLeft : undefined,
+            visitedIslands,
             savedAt: Date.now(),
           } satisfies InProgressState)
         );
@@ -684,24 +821,36 @@ export default function App() {
       deviceId,
       doubleScoreActive,
       glitchShuffleForNext,
+      globalTimeLeft,
       immuneQuestionsRemaining,
       inProgressKey,
+      isGlobalTimer,
       liveRunId,
       notify,
       playDeck,
       playerHistory,
       playerName,
       powerupInventory,
+      resolvedTeamName,
       roomCode,
       score,
       sessionMode,
       timeLeft,
+      totalGlobalSeconds,
+      visitedIslands,
     ]
   );
 
-  // Question countdown timer (pauses during preCountdown, feedback, and freeze)
+  // Per-question countdown timer (disabled when Global Quiz Timer is active)
   useEffect(() => {
-    if (screen !== 'quiz' || feedback || isFrozen || preCountdown !== null) {
+    if (
+      isGlobalTimer ||
+      screen !== 'quiz' ||
+      feedback ||
+      isFrozen ||
+      dockedIslandModal ||
+      preCountdown !== null
+    ) {
       return;
     }
     const interval = window.setInterval(() => {
@@ -728,9 +877,11 @@ export default function App() {
     }, 1000);
     return () => window.clearInterval(interval);
   }, [
+    isGlobalTimer,
     screen,
     feedback,
     isFrozen,
+    dockedIslandModal,
     preCountdown,
     currentQuestionIndex,
     playDeck,
@@ -783,66 +934,180 @@ export default function App() {
     }
   };
 
-  const finishQuiz = () => {
-    playFinishFx();
-    setShowConfetti(true);
-    if (!isAutostartDemoRef.current) {
-      unregisterActivePlayerCloud(deviceId);
-    }
-    safeRemoveStorage(inProgressKey);
-    setRecoverableProgress(null);
-
-    const record: PlayerRecord = {
-      id: deviceId,
-      deviceId,
-      name: playerName,
-      score,
-      correct: correctCount,
-      totalQuestions: playDeck.length,
-      history: playerHistory,
-      completedAt: new Date().toISOString(),
-    };
-
-    if (!isAutostartDemoRef.current) {
-      safeSetStorage(completedRecordKey, JSON.stringify(record));
-    }
-    setSavedRecord(record);
-    setLeaderboard((prev) => {
-      const idx = prev.findIndex((p) => p.deviceId === record.deviceId);
-      if (idx >= 0) {
-        const copy = [...prev];
-        copy[idx] = record;
-        return copy;
+  const finishQuiz = useCallback(
+    (overrideFinalScore?: number) => {
+      playFinishFx();
+      setShowConfetti(true);
+      setDockedIslandModal(null);
+      if (!isAutostartDemoRef.current) {
+        unregisterActivePlayerCloud(deviceId);
       }
-      return [...prev, record];
-    });
-    setScreen('leaderboard');
+      safeRemoveStorage(inProgressKey);
+      setRecoverableProgress(null);
 
-    if (!isAutostartDemoRef.current) {
-      saveScoreToCloud(record).then((ok) => {
-        if (!ok && cloudStatus === 'error') {
-          notify('Gagal simpan ke Firebase: periksa tab Rules di Firestore!');
+      const finalScore =
+        typeof overrideFinalScore === 'number' ? overrideFinalScore : score;
+
+      const record: PlayerRecord = {
+        id: deviceId,
+        deviceId,
+        name: playerName,
+        teamName: resolvedTeamName || undefined,
+        score: finalScore,
+        correct: correctCount,
+        totalQuestions: playDeck.length,
+        history: playerHistory,
+        completedAt: new Date().toISOString(),
+      };
+
+      if (!isAutostartDemoRef.current) {
+        safeSetStorage(completedRecordKey, JSON.stringify(record));
+      }
+      setSavedRecord(record);
+      setLeaderboard((prev) => {
+        const idx = prev.findIndex((p) => p.deviceId === record.deviceId);
+        if (idx >= 0) {
+          const copy = [...prev];
+          copy[idx] = record;
+          return copy;
         }
+        return [...prev, record];
       });
+      setScreen('leaderboard');
+
+      if (!isAutostartDemoRef.current) {
+        saveScoreToCloud(record).then((ok) => {
+          if (!ok && cloudStatus === 'error') {
+            notify('Gagal simpan ke Firebase: periksa tab Rules di Firestore!');
+          }
+        });
+      }
+    },
+    [
+      cloudStatus,
+      completedRecordKey,
+      correctCount,
+      deviceId,
+      inProgressKey,
+      notify,
+      playDeck.length,
+      playerHistory,
+      playerName,
+      resolvedTeamName,
+      score,
+    ]
+  );
+
+  const finishQuizRef = useRef(finishQuiz);
+  finishQuizRef.current = finishQuiz;
+
+  // Global Quiz Timer effect (1 shared timer for entire quiz)
+  useEffect(() => {
+    if (
+      !isGlobalTimer ||
+      screen !== 'quiz' ||
+      preCountdown !== null ||
+      isFrozen ||
+      dockedIslandModal ||
+      totalGlobalSeconds <= 0
+    ) {
+      return;
     }
-  };
+    const interval = window.setInterval(() => {
+      setGlobalTimeLeft((prev) => {
+        if (prev <= 1) {
+          window.clearInterval(interval);
+          notify('Waktu kuis global habis! Mengumpulkan hasil...');
+          window.setTimeout(() => finishQuizRef.current(), 0);
+          return 0;
+        }
+        const nextVal = prev - 1;
+        if (nextVal <= 10 && nextVal > 0) {
+          playUrgentTickFx();
+        }
+        return nextVal;
+      });
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, [
+    isGlobalTimer,
+    screen,
+    preCountdown,
+    isFrozen,
+    dockedIslandModal,
+    totalGlobalSeconds,
+    notify,
+  ]);
+
+  const advanceAfterQuestion = useCallback(
+    (overrideScore?: number) => {
+      const nextIdx = currentQuestionIndex + 1;
+      if (nextIdx < playDeck.length) {
+        setCurrentQuestionIndex(nextIdx);
+        prepareQuestionView(
+          nextIdx,
+          playDeck,
+          glitchShuffleForNext,
+          powerupInventory,
+          typeof overrideScore === 'number' ? overrideScore : score,
+          awardedDebuffMilestones,
+          immuneQuestionsRemaining
+        );
+      } else {
+        finishQuiz(overrideScore);
+      }
+    },
+    [
+      awardedDebuffMilestones,
+      currentQuestionIndex,
+      finishQuiz,
+      glitchShuffleForNext,
+      immuneQuestionsRemaining,
+      playDeck,
+      powerupInventory,
+      prepareQuestionView,
+      score,
+    ]
+  );
 
   const handleNextQuestion = () => {
-    const nextIdx = currentQuestionIndex + 1;
-    if (nextIdx < playDeck.length) {
-      setCurrentQuestionIndex(nextIdx);
-      prepareQuestionView(
-        nextIdx,
-        playDeck,
-        glitchShuffleForNext,
-        powerupInventory,
-        score,
-        awardedDebuffMilestones,
-        immuneQuestionsRemaining
+    if (
+      settings.gameplayMode === 'voyage' &&
+      voyageProgress?.dockedIsland &&
+      !visitedIslands.includes(voyageProgress.dockedIsland.islandNumber)
+    ) {
+      playIslandDockFx();
+      setDockedIslandModal(voyageProgress.dockedIsland);
+      return;
+    }
+    advanceAfterQuestion();
+  };
+
+  const handleIslandMinigameComplete = (reward: IslandMinigameReward) => {
+    const docked = dockedIslandModal;
+    if (!docked) return;
+    setVisitedIslands((prev) =>
+      prev.includes(docked.islandNumber) ? prev : [...prev, docked.islandNumber]
+    );
+    setDockedIslandModal(null);
+
+    const grantRes = grantPowerupToSlots(powerupInventory, reward.powerupId);
+    const totalBonus = reward.bonusPoints + grantRes.bonusPoints;
+    const nextScore = score + totalBonus;
+    setScore(nextScore);
+    setPowerupInventory(grantRes.nextInventory);
+
+    if (grantRes.bonusPoints > 0) {
+      notify(
+        `Berlabuh di ${reward.islandName}: +${totalBonus} poin (slot penuh dikonversi)!`
       );
     } else {
-      finishQuiz();
+      notify(
+        `Berlabuh di ${reward.islandName}: Dapat ${POWERUP_CATALOG[reward.powerupId].name} + ${reward.bonusPoints} poin!`
+      );
     }
+
+    advanceAfterQuestion(nextScore);
   };
 
   const handleActivatePowerup = (slotIdx: number) => {
@@ -886,7 +1151,11 @@ export default function App() {
     } else if (itemId === 'SHIELD') {
       setImmuneQuestionsRemaining((prev) => Math.max(prev, 2));
       notify('Perisai aktif! Kamu kebal terhadap Debuff lawan.');
-    } else if (itemId === 'FREEZE_LEADER' || itemId === 'GLITCH_SHUFFLE') {
+    } else if (
+      itemId === 'FREEZE_LEADER' ||
+      itemId === 'GLITCH_SHUFFLE' ||
+      itemId === 'TORNADO'
+    ) {
       const target = pickSabotageTarget(activePlayers, leaderboard, deviceId);
       if (!target) {
         setScore((s) => s + 100);
@@ -901,7 +1170,11 @@ export default function App() {
           createdAt: Date.now(),
         });
         const label =
-          itemId === 'FREEZE_LEADER' ? 'Bekukan #1' : 'Acak Opsi';
+          itemId === 'FREEZE_LEADER'
+            ? 'Bekukan #1'
+            : itemId === 'TORNADO'
+              ? 'Puting Beliung'
+              : 'Acak Opsi';
         notify(`Debuff ${label} dikirim ke ${target.name}!`);
       }
     }
@@ -916,6 +1189,13 @@ export default function App() {
       setNameError('Silakan masukkan nama terlebih dahulu!');
       return;
     }
+    const needsTeam =
+      settings.participationMode === 'team' ||
+      (settings.participationMode === 'either' && teamModeChoice === 'team');
+    if (needsTeam && !teamName.trim()) {
+      setNameError('Silakan masukkan nama tim / kru terlebih dahulu!');
+      return;
+    }
     setNameError('');
 
     if (sessionMode === 'live_waiting') {
@@ -923,6 +1203,7 @@ export default function App() {
       joinWaitingRoomCloud({
         deviceId,
         name: trimmed,
+        teamName: resolvedTeamName || undefined,
         joinedAt: Date.now(),
       });
     } else {
@@ -943,6 +1224,22 @@ export default function App() {
           : 0)
     );
     setPlayerName(recoverableProgress.playerName);
+    if (recoverableProgress.teamName) {
+      setTeamModeChoice('team');
+      setTeamName(recoverableProgress.teamName);
+    }
+    if (
+      typeof recoverableProgress.globalTimeLeftSeconds === 'number' &&
+      recoverableProgress.globalTimeLeftSeconds > 0
+    ) {
+      const fullSecs = Math.max(
+        recoverableProgress.globalTimeLeftSeconds,
+        (settings.quizDurationMinutes || 0) * 60
+      );
+      setTotalGlobalSeconds(fullSecs);
+      setGlobalTimeLeft(recoverableProgress.globalTimeLeftSeconds);
+    }
+    setVisitedIslands(recoverableProgress.visitedIslands || []);
     setScore(recoverableProgress.score);
     setCorrectCount(recoverableProgress.correctCount);
     setPlayerHistory(recoverableProgress.playerHistory);
@@ -1168,6 +1465,8 @@ export default function App() {
               settings={settings}
               roomCode={roomCode}
               playerName={playerName}
+              teamModeChoice={teamModeChoice}
+              teamName={teamName}
               nameError={nameError}
               hasPlayedThisDevice={hasPlayedThisDevice}
               savedPlayerRecord={savedRecord}
@@ -1183,6 +1482,14 @@ export default function App() {
                 setPlayerName(v);
                 if (nameError) setNameError('');
               }}
+              onTeamModeChoiceChange={(mode) => {
+                setTeamModeChoice(mode);
+                if (nameError) setNameError('');
+              }}
+              onTeamNameChange={(v) => {
+                setTeamName(v);
+                if (nameError) setNameError('');
+              }}
               onStartClick={handleLobbyStart}
               onResumeProgress={handleResumeProgress}
               onDiscardProgress={handleDiscardProgress}
@@ -1196,8 +1503,11 @@ export default function App() {
           {screen === 'waiting' && (
             <WaitingRoomScreen
               playerName={playerName}
+              teamName={resolvedTeamName || undefined}
               deviceId={deviceId}
               waitingPlayers={waitingPlayers}
+              showLiveLeaderboardToPlayers={settings.showLiveLeaderboardToPlayers}
+              onOpenLiveLeaderboard={() => setLiveLbModalOpen(true)}
               isMuted={isMuted}
               onToggleMute={handleToggleMute}
               onLeave={() => {
@@ -1241,8 +1551,19 @@ export default function App() {
                 question={activeQuestion}
                 questionIndex={currentQuestionIndex}
                 totalQuestions={playDeck.length}
+                answeredCount={playerHistory.length}
                 score={score}
                 timeLeft={timeLeft}
+                isGlobalTimer={isGlobalTimer}
+                globalTimeLeft={globalTimeLeft}
+                totalGlobalSeconds={totalGlobalSeconds}
+                gameplayMode={settings.gameplayMode}
+                voyageProgress={voyageProgress}
+                teamName={resolvedTeamName || undefined}
+                activePlayers={activePlayers}
+                selfDeviceId={deviceId}
+                showLiveLeaderboardToPlayers={settings.showLiveLeaderboardToPlayers}
+                onOpenLiveLeaderboard={() => setLiveLbModalOpen(true)}
                 currentStreak={currentStreak}
                 compactMode={settings.compactMode}
                 powerupInventory={powerupInventory}
@@ -1252,6 +1573,8 @@ export default function App() {
                 isFrozen={isFrozen}
                 freezeCountdown={freezeCountdown}
                 freezeAttackerName={freezeAttackerName}
+                tornadoCountdown={tornadoCountdown}
+                tornadoAttackerName={tornadoAttackerName}
                 optionOrder={optionOrder}
                 eliminatedIndices={eliminatedIndices}
                 selectedSingleIndex={selectedSingleIndex}
@@ -1268,6 +1591,13 @@ export default function App() {
                 onNextQuestion={handleNextQuestion}
                 onActivatePowerup={handleActivatePowerup}
               />
+
+              {dockedIslandModal && (
+                <IslandMinigameModal
+                  island={dockedIslandModal}
+                  onComplete={handleIslandMinigameComplete}
+                />
+              )}
             </div>
           )}
 
@@ -1495,6 +1825,16 @@ export default function App() {
             </div>
           </div>
         )}
+
+        {/* Modal Klasemen Live (Jika Diaktifkan Admin) */}
+        <LiveLeaderboardModal
+          isOpen={liveLbModalOpen}
+          onClose={() => setLiveLbModalOpen(false)}
+          leaderboard={leaderboard}
+          activePlayers={activePlayers}
+          totalQuestions={playDeck.length || questions.length}
+          selfDeviceId={deviceId}
+        />
 
         {/* Toast Notification */}
         {toastMessage && (

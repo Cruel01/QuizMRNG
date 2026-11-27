@@ -19,8 +19,9 @@ export function buildGoogleSitesScripts(
       DOUBLE_SCORE: { id: 'DOUBLE_SCORE', name: 'Skor 2x', kind: 'buff', weight: 10, desc: 'Menggandakan poin pada soal aktif ini!' },
       FIFTY_FIFTY: { id: 'FIFTY_FIFTY', name: '50:50', kind: 'buff', weight: 25, desc: 'Menghapus 2 opsi jawaban yang salah.' },
       SHIELD: { id: 'SHIELD', name: 'Perisai', kind: 'buff', weight: 20, desc: 'Menangkal otomatis serangan Debuff lawan.' },
-      FREEZE_LEADER: { id: 'FREEZE_LEADER', name: 'Bekukan #1', kind: 'debuff', weight: 20, desc: 'Membekukan layar peringkat #1 aktif selama 4 detik!' },
-      GLITCH_SHUFFLE: { id: 'GLITCH_SHUFFLE', name: 'Acak Opsi', kind: 'debuff', weight: 25, desc: 'Mengacak posisi tombol opsi lawan pada soal berikutnya.' }
+      FREEZE_LEADER: { id: 'FREEZE_LEADER', name: 'Bekukan #1', kind: 'debuff', weight: 18, desc: 'Membekukan layar peringkat #1 aktif selama 4 detik!' },
+      GLITCH_SHUFFLE: { id: 'GLITCH_SHUFFLE', name: 'Acak Opsi', kind: 'debuff', weight: 20, desc: 'Mengacak posisi tombol opsi lawan pada soal berikutnya.' },
+      TORNADO: { id: 'TORNADO', name: 'Puting Beliung', kind: 'debuff', weight: 22, desc: 'Badai angin 5 detik mengguncang layar & mengacak opsi lawan!' }
     };
 
     var memoryStorage = {};
@@ -161,11 +162,16 @@ export function buildGoogleSitesScripts(
 
     var playDeck = questions.slice();
     var playerName = '';
+    var teamModeChoice = 'solo';
+    var teamName = '';
     var currentQuestionIndex = 0;
     var score = 0;
     var correctCount = 0;
     var timeLeft = 25;
     var timerInterval = null;
+    var globalTimeLeft = 0;
+    var totalGlobalSeconds = 0;
+    var globalTimerInterval = null;
     var preCountdownValue = null;
     var preCountdownTimer = null;
     var playerHistory = [];
@@ -178,6 +184,15 @@ export function buildGoogleSitesScripts(
     var awardedDebuffMilestones = [];
     var isFrozen = false;
     var freezeInterval = null;
+    var tornadoCountdown = 0;
+    var tornadoAttackerName = '';
+    var tornadoInterval = null;
+    var dockedIslandModal = null;
+    var visitedIslands = [];
+    var helmAnimInterval = null;
+    var lbStandingsTab = 'individual';
+    var adminLbTab = 'individual';
+    var liveLbModalTab = 'individual';
     var currentOptionOrder = [0, 1, 2, 3];
     var eliminatedIndices = [];
     var selectedMultipleIndices = [];
@@ -251,6 +266,22 @@ export function buildGoogleSitesScripts(
       playTone(987.77, 0.08, 'sine', 0.07, 0);
       playTone(740, 0.12, 'sine', 0.07, 0.06);
       playTone(523.25, 0.22, 'sine', 0.06, 0.12);
+    }
+    function playTornadoFx() {
+      playTone(170, 0.25, 'sawtooth', 0.065, 0, 340);
+      playTone(320, 0.28, 'triangle', 0.06, 0.14, 150);
+      playTone(220, 0.3, 'sawtooth', 0.05, 0.3, 120);
+    }
+    function playIslandDockFx() {
+      playTone(392.0, 0.1, 'triangle', 0.08, 0);
+      playTone(493.88, 0.12, 'triangle', 0.085, 0.08);
+      playTone(587.33, 0.15, 'triangle', 0.09, 0.16);
+      playTone(783.99, 0.24, 'sine', 0.08, 0.24);
+    }
+    function playChestRewardFx() {
+      playTone(587.33, 0.09, 'sine', 0.08, 0);
+      playTone(783.99, 0.11, 'triangle', 0.085, 0.07);
+      playTone(1046.5, 0.22, 'triangle', 0.095, 0.14);
     }
     function playFinishFx() {
       playTone(523.25, 0.11, 'triangle', 0.08, 0);
@@ -409,6 +440,114 @@ export function buildGoogleSitesScripts(
       return pool[0].id;
     }
 
+    function isGlobalQuizTimerActive() {
+      var mins = Number(settings.quizDurationMinutes) || 0;
+      return mins > 0 && currentSessionMode !== 'unconfigured';
+    }
+    function formatCountdownClock(totalSecs) {
+      var safe = Math.max(0, Math.floor(Number(totalSecs) || 0));
+      var m = Math.floor(safe / 60);
+      var s = safe % 60;
+      return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+    }
+    var VOYAGE_ISLAND_NAMES = [
+      'Pulau Rempah Maluku',
+      'Teluk Karang Raja Ampat',
+      'Tanjung Komodo',
+      'Selat Keris Jawa',
+      'Pantai Zamrud Sumatera',
+      'Pulau Harta Karun Nusantara'
+    ];
+    function buildVoyageCheckpoints(totalQ) {
+      var safeTotal = Math.max(1, Math.floor(Number(totalQ) || 1));
+      var totalIslands = safeTotal < 5 ? 1 : Math.floor(safeTotal / 5);
+      var cps = [];
+      for (var i = 0; i < totalIslands; i++) {
+        var qNum = safeTotal < 5 ? safeTotal : Math.min(safeTotal, (i + 1) * 5);
+        var prevQ = i === 0 ? 0 : cps[i - 1].questionNumber;
+        var base = i === totalIslands - 1 ? VOYAGE_ISLAND_NAMES[VOYAGE_ISLAND_NAMES.length - 1] : VOYAGE_ISLAND_NAMES[i % (VOYAGE_ISLAND_NAMES.length - 1)];
+        cps.push({
+          islandIndex: i,
+          islandNumber: i + 1,
+          name: (totalIslands > VOYAGE_ISLAND_NAMES.length && i < totalIslands - 1) ? (base + ' ' + (Math.floor(i / (VOYAGE_ISLAND_NAMES.length - 1)) + 1)) : base,
+          questionNumber: qNum,
+          legStartQuestion: prevQ + 1,
+          positionPercent: Math.round((qNum / safeTotal) * 100)
+        });
+      }
+      return cps;
+    }
+    function getVoyageProgressState(answeredCnt, totalQ) {
+      var safeTotal = Math.max(1, Math.floor(Number(totalQ) || 1));
+      var safeAns = Math.max(0, Math.min(safeTotal, Math.floor(answeredCnt || 0)));
+      var cps = buildVoyageCheckpoints(safeTotal);
+      var totalIslands = cps.length;
+      var completedIslands = 0;
+      var dockedIsland = null;
+      for (var i = 0; i < cps.length; i++) {
+        if (safeAns >= cps[i].questionNumber) completedIslands++;
+        if (safeAns > 0 && cps[i].questionNumber === safeAns) dockedIsland = cps[i];
+      }
+      var curLeg = Math.min(totalIslands - 1, completedIslands >= totalIslands ? totalIslands - 1 : completedIslands);
+      var target = cps[curLeg] || null;
+      var legStart = target ? target.legStartQuestion - 1 : 0;
+      var legEnd = target ? target.questionNumber : safeTotal;
+      var legSpan = Math.max(1, legEnd - legStart);
+      var qInLeg = dockedIsland ? legSpan : Math.max(0, safeAns - legStart);
+      var legStep = 0;
+      if (dockedIsland || qInLeg >= legSpan) legStep = 3;
+      else if (qInLeg >= Math.max(3, Math.ceil(legSpan * 0.6))) legStep = 2;
+      else if (qInLeg >= 1) legStep = 1;
+      return {
+        checkpoints: cps, totalIslands: totalIslands, completedIslands: completedIslands,
+        currentLegIndex: curLeg, legStep: legStep, nextIsland: target, dockedIsland: dockedIsland,
+        shipPercent: Math.min(100, Math.round((safeAns / safeTotal) * 100))
+      };
+    }
+    function aggregateTeamLeaderboard(records) {
+      var map = {};
+      var order = [];
+      (records || []).forEach(function(rec) {
+        var rawTeam = String(rec.teamName || '').trim();
+        var isSolo = !rawTeam;
+        var key = isSolo ? ('SOLO::' + String(rec.name || 'Peserta').trim().toLowerCase()) : ('TEAM::' + rawTeam.toLowerCase());
+        var disp = isSolo ? ('Solo · ' + (rec.name || 'Peserta')) : rawTeam;
+        if (!map[key]) {
+          map[key] = { teamName: disp, isSolo: isSolo, memberCount: 1, members: [rec.name || 'Peserta'], totalScore: rec.score || 0, avgScore: rec.score || 0, totalCorrect: rec.correct || 0 };
+          order.push(key);
+        } else {
+          var ex = map[key];
+          ex.memberCount++;
+          ex.members.push(rec.name || 'Peserta');
+          ex.totalScore += (rec.score || 0);
+          ex.totalCorrect += (rec.correct || 0);
+          ex.avgScore = Math.round(ex.totalScore / ex.memberCount);
+        }
+      });
+      return order.map(function(k) { return map[k]; }).sort(function(a, b) { return b.totalScore - a.totalScore; });
+    }
+    function mergeLiveAndFinishedLeaderboard(finished, activeList, defaultTotal) {
+      var map = {};
+      var keys = [];
+      (finished || []).forEach(function(p) {
+        var id = p.deviceId || p.id;
+        map[id] = { deviceId: id, name: p.name, teamName: p.teamName || '', score: p.score || 0, correct: p.correct || 0, currentQuestion: p.totalQuestions || defaultTotal, totalQuestions: p.totalQuestions || defaultTotal, status: 'finished' };
+        keys.push(id);
+      });
+      filterFreshActivePlayers(activeList).forEach(function(ap) {
+        if (!ap.deviceId || map[ap.deviceId]) return;
+        map[ap.deviceId] = { deviceId: ap.deviceId, name: ap.name, teamName: ap.teamName || '', score: ap.score || 0, correct: 0, currentQuestion: ap.currentQuestion || 1, totalQuestions: ap.totalQuestions || defaultTotal, status: 'playing' };
+        keys.push(ap.deviceId);
+      });
+      return keys.map(function(k) { return map[k]; }).sort(function(a, b) { return b.score - a.score; });
+    }
+    function getResolvedTeamName() {
+      var pm = settings.participationMode || 'either';
+      if (pm === 'solo') return '';
+      if (pm === 'team') return (teamName || '').trim();
+      return teamModeChoice === 'team' ? (teamName || '').trim() : '';
+    }
+
     // ==================== LOBBY RENDERING & ROOM MODAL ====================
     function getCatGlyphSvg(cat) {
       if (cat.kind === 'animals') {
@@ -482,11 +621,31 @@ export function buildGoogleSitesScripts(
       renderLobbyCategories();
 
       var limit = Math.max(0, Math.floor(Number(settings.questionLimit) || 0));
+      var effectiveCount = (limit > 0 && limit < questions.length) ? limit : questions.length;
       var targetStr = (limit > 0 && limit < questions.length) ? (limit + ' dari ' + questions.length) : String(questions.length);
       document.getElementById('lobby-total-questions').textContent = targetStr;
-      document.getElementById('lobby-meta-flags').textContent = (settings.allowReplay ? ' · Mode Latihan' : '') + (settings.shuffleQuestions ? ' · Soal Acak' : '');
+      var durMins = Number(settings.quizDurationMinutes) || 0;
+      var flagsStr = (settings.gameplayMode === 'voyage' ? (' · Berlayar ' + buildVoyageCheckpoints(effectiveCount).length + ' Pulau') : '') +
+        (durMins > 0 ? (' · Timer ' + durMins + ' Menit') : '') +
+        (settings.allowReplay ? ' · Mode Latihan' : '') +
+        (settings.shuffleQuestions ? ' · Soal Acak' : '');
+      document.getElementById('lobby-meta-flags').textContent = flagsStr;
       document.getElementById('lobby-room-label').textContent = activeRoomCode ? ('#' + activeRoomCode) : 'Umum';
       document.getElementById('admin-room-badge').textContent = activeRoomCode ? ('#' + activeRoomCode) : 'Umum (Default)';
+
+      var partMode = settings.participationMode || 'either';
+      var partWrap = document.getElementById('lobby-participation-wrap');
+      var teamWrap = document.getElementById('lobby-team-input-wrap');
+      if (partWrap) partWrap.classList.toggle('hidden', partMode !== 'either');
+      if (teamWrap) teamWrap.classList.toggle('hidden', !(partMode === 'team' || (partMode === 'either' && teamModeChoice === 'team')));
+      var btnSolo = document.getElementById('btn-part-solo');
+      var btnTeam = document.getElementById('btn-part-team');
+      if (btnSolo && btnTeam) {
+        btnSolo.className = 'flex-1 py-2 rounded-lg text-xs font-bold cursor-pointer ' + (teamModeChoice === 'solo' ? 'bg-amber-400 text-slate-950' : 'text-slate-300 hover:text-white');
+        btnTeam.className = 'flex-1 py-2 rounded-lg text-xs font-bold cursor-pointer ' + (teamModeChoice === 'team' ? 'bg-sky-400 text-slate-950' : 'text-slate-300 hover:text-white');
+      }
+      var btnWaitLb = document.getElementById('btn-waiting-live-lb');
+      if (btnWaitLb) btnWaitLb.classList.toggle('hidden', !settings.showLiveLeaderboardToPlayers);
 
       var statusEl = document.getElementById('lobby-mode-status');
       var textEl = document.getElementById('lobby-mode-text');
@@ -527,7 +686,7 @@ export function buildGoogleSitesScripts(
       var btnStart = document.getElementById('btn-start-quiz');
       var btnLb = document.getElementById('btn-lobby-leaderboard');
 
-      if (btnLb) btnLb.classList.toggle('hidden', !(cloudLeaderboard.length > 0 || hasPlayedThisDevice));
+      if (btnLb) btnLb.classList.toggle('hidden', !(cloudLeaderboard.length > 0 || hasPlayedThisDevice || settings.showLiveLeaderboardToPlayers));
 
       if (effectiveLocked) {
         awaitBanner.classList.add('hidden');
@@ -564,6 +723,12 @@ export function buildGoogleSitesScripts(
       if (activeScreen === 'admin') {
         renderAdminSessionControls();
       }
+    }
+
+    function selectTeamChoice(mode) {
+      playPopClickFx();
+      teamModeChoice = mode === 'team' ? 'team' : 'solo';
+      updateLobbyUI();
     }
 
     function openRoomModal() {
@@ -607,17 +772,28 @@ export function buildGoogleSitesScripts(
       var effectiveLocked = hasPlayedThisDevice && !settings.allowReplay;
       if (effectiveLocked || currentSessionMode === 'unconfigured') return;
       var inp = document.getElementById('player-name');
+      var teamInp = document.getElementById('player-team-name');
       var name = (inp.value || '').trim();
+      var tVal = teamInp ? (teamInp.value || '').trim() : '';
       var err = document.getElementById('name-error');
-      if (!name) { err.classList.remove('hidden'); inp.focus(); return; }
+      if (!name) { err.textContent = 'Silakan masukkan nama terlebih dahulu.'; err.classList.remove('hidden'); inp.focus(); return; }
+      var pm = settings.participationMode || 'either';
+      if ((pm === 'team' || (pm === 'either' && teamModeChoice === 'team')) && !tVal) {
+        err.textContent = 'Silakan masukkan nama tim / kru terlebih dahulu.';
+        err.classList.remove('hidden');
+        if (teamInp) teamInp.focus();
+        return;
+      }
       err.classList.add('hidden');
       playerName = name;
+      teamName = tVal;
 
+      var resolvedTeam = getResolvedTeamName();
       if (currentSessionMode === 'live_waiting') {
-        document.getElementById('waiting-my-name').textContent = name;
+        document.getElementById('waiting-my-name').textContent = resolvedTeam ? (name + ' (Tim ' + resolvedTeam + ')') : name;
         showScreen('waiting');
         renderWaitingRoom();
-        if (window.joinWaitingRoomCloud) window.joinWaitingRoomCloud({ deviceId: myDeviceId, name: name, joinedAt: Date.now() });
+        if (window.joinWaitingRoomCloud) window.joinWaitingRoomCloud({ deviceId: myDeviceId, name: name, teamName: resolvedTeam || undefined, joinedAt: Date.now() });
       } else {
         startGameplay(name, currentSessionMode, currentLiveRunId, false, false);
       }
@@ -635,7 +811,8 @@ export function buildGoogleSitesScripts(
       listEl.innerHTML = waitingPlayers.map(function(p) {
         var isMe = p.deviceId === myDeviceId;
         var cls = isMe ? 'bg-amber-400 text-slate-950' : 'bg-[#131C31] text-slate-200 border border-[#23304C]';
-        return '<span class="px-3 py-1.5 rounded-lg text-xs font-bold ' + cls + '">' + escapeHtml(p.name) + (isMe ? ' (Kamu)' : '') + '</span>';
+        var tTag = p.teamName ? (' · ' + escapeHtml(p.teamName)) : '';
+        return '<span class="px-3 py-1.5 rounded-lg text-xs font-bold ' + cls + '">' + escapeHtml(p.name) + tTag + (isMe ? ' (Kamu)' : '') + '</span>';
       }).join('');
     }
     function leaveWaitingRoom() {
@@ -652,6 +829,12 @@ export function buildGoogleSitesScripts(
       if ((recoverableProgress.playerHistory || []).length > nextIdx) nextIdx++;
       if (nextIdx >= playDeck.length) nextIdx = playDeck.length - 1;
       playerName = recoverableProgress.playerName;
+      if (recoverableProgress.teamName) { teamModeChoice = 'team'; teamName = recoverableProgress.teamName; }
+      if (typeof recoverableProgress.globalTimeLeftSeconds === 'number' && recoverableProgress.globalTimeLeftSeconds > 0) {
+        totalGlobalSeconds = Math.max(recoverableProgress.globalTimeLeftSeconds, (Number(settings.quizDurationMinutes) || 0) * 60);
+        globalTimeLeft = recoverableProgress.globalTimeLeftSeconds;
+      }
+      visitedIslands = recoverableProgress.visitedIslands || [];
       score = recoverableProgress.score || 0;
       correctCount = recoverableProgress.correctCount || 0;
       playerHistory = recoverableProgress.playerHistory || [];
@@ -666,6 +849,7 @@ export function buildGoogleSitesScripts(
       document.getElementById('pre-countdown-overlay').classList.add('hidden');
       showScreen('quiz');
       loadQuestion();
+      startGlobalTimer();
       showToast('Sesi sebelumnya dipulihkan!');
     }
     function discardRecoverableProgress() {
@@ -679,6 +863,7 @@ export function buildGoogleSitesScripts(
     function startPreCountdown() {
       clearTimeout(preCountdownTimer);
       clearInterval(timerInterval);
+      clearInterval(globalTimerInterval);
       preCountdownValue = 3;
       var ov = document.getElementById('pre-countdown-overlay');
       var num = document.getElementById('pre-countdown-number');
@@ -694,6 +879,7 @@ export function buildGoogleSitesScripts(
             ov.classList.add('hidden');
             playCountdownGoFx();
             startQuestionTimer();
+            startGlobalTimer();
           } else {
             preCountdownValue = preCountdownValue - 1;
             num.classList.remove('anim-countdown-pop');
@@ -713,25 +899,26 @@ export function buildGoogleSitesScripts(
       document.getElementById('pre-countdown-overlay').classList.add('hidden');
       playCountdownGoFx();
       startQuestionTimer();
+      startGlobalTimer();
     }
 
     function startGameplay(name, modeUsed, runIdUsed, localOnly, skipCountdown) {
       playerName = name;
+      var resolvedTeam = getResolvedTeamName();
       var src = questions.length > 0 ? questions : DEFAULT_QUESTIONS_DATA;
       playDeck = prepareQuizDeck(src, settings);
+
+      var globalEnabled = (Number(settings.quizDurationMinutes) || 0) > 0 && modeUsed !== 'unconfigured';
+      totalGlobalSeconds = globalEnabled ? Math.max(60, Math.round(Number(settings.quizDurationMinutes) * 60)) : 0;
+      globalTimeLeft = totalGlobalSeconds;
 
       if (!localOnly) {
         if (window.leaveWaitingRoomCloud) window.leaveWaitingRoomCloud(myDeviceId);
         if (window.upsertActivePlayerCloud) {
           window.upsertActivePlayerCloud({
-            deviceId: myDeviceId,
-            name: name,
-            mode: modeUsed,
-            score: 0,
-            currentQuestion: 1,
-            totalQuestions: playDeck.length,
-            startedAt: Date.now(),
-            lastSeen: Date.now()
+            deviceId: myDeviceId, name: name, teamName: resolvedTeam || undefined,
+            mode: modeUsed, score: 0, currentQuestion: 1, totalQuestions: playDeck.length,
+            startedAt: Date.now(), lastSeen: Date.now()
           });
         }
       }
@@ -746,8 +933,16 @@ export function buildGoogleSitesScripts(
       immuneQuestionsRemaining = 0;
       glitchShuffleForNext = false;
       isFrozen = false;
+      tornadoCountdown = 0;
+      tornadoAttackerName = '';
+      dockedIslandModal = null;
+      visitedIslands = [];
       clearInterval(freezeInterval);
+      clearInterval(tornadoInterval);
+      clearInterval(globalTimerInterval);
       document.getElementById('freeze-overlay').classList.add('hidden');
+      document.getElementById('tornado-banner').classList.add('hidden');
+      document.getElementById('modal-island-minigame').classList.add('hidden');
       document.getElementById('confetti-container').classList.add('hidden');
       recoverableProgress = null;
 
@@ -758,26 +953,20 @@ export function buildGoogleSitesScripts(
         preCountdownValue = null;
         document.getElementById('pre-countdown-overlay').classList.add('hidden');
         startQuestionTimer();
+        startGlobalTimer();
       } else {
         startPreCountdown();
       }
 
       if (!localOnly) {
         safeSetStorage(getInProgressKey(), JSON.stringify({
-          deviceId: myDeviceId,
-          playerName: name,
-          runId: runIdUsed,
-          roomCode: activeRoomCode,
-          currentQuestionIndex: 0,
-          score: 0,
-          correctCount: 0,
-          playerHistory: [],
-          powerupInventory: [null, null],
-          currentStreak: 0,
-          immuneQuestionsRemaining: 0,
-          awardedDebuffMilestones: [],
-          glitchShuffleActiveForNext: false,
-          savedAt: Date.now()
+          deviceId: myDeviceId, playerName: name, teamName: resolvedTeam || undefined,
+          runId: runIdUsed, roomCode: activeRoomCode,
+          currentQuestionIndex: 0, score: 0, correctCount: 0,
+          playerHistory: [], powerupInventory: [null, null], currentStreak: 0,
+          immuneQuestionsRemaining: 0, awardedDebuffMilestones: [],
+          glitchShuffleActiveForNext: false, globalTimeLeftSeconds: totalGlobalSeconds || undefined,
+          visitedIslands: [], savedAt: Date.now()
         }));
       }
     }
@@ -910,6 +1099,9 @@ export function buildGoogleSitesScripts(
       timeLeft = q.time || 25;
       updateTimerDisplay();
       renderPowerupSlots();
+      renderVoyageRoadmap();
+      var btnQuizLb = document.getElementById('btn-quiz-live-lb');
+      if (btnQuizLb) btnQuizLb.classList.toggle('hidden', !settings.showLiveLeaderboardToPlayers);
 
       var optLen = (q.options || []).length;
       var shouldShuffleOpts = (q.type === 'MC' || q.type === 'MS') && (glitchShuffleForNext || settings.shuffleOptions);
@@ -925,6 +1117,51 @@ export function buildGoogleSitesScripts(
       }
 
       renderQuestionOptions();
+    }
+
+    function renderVoyageRoadmap() {
+      var box = document.getElementById('voyage-roadmap-box');
+      if (!box) return;
+      if (settings.gameplayMode !== 'voyage') {
+        box.classList.add('hidden');
+        return;
+      }
+      box.classList.remove('hidden');
+      var vp = getVoyageProgressState(playerHistory.length, playDeck.length);
+      var rTeam = getResolvedTeamName();
+      var shipLeft = Math.max(4, Math.min(94, vp.shipPercent));
+      var stepsHtml = [1, 2, 3].map(function(step) {
+        var reached = vp.legStep >= step;
+        return '<span class="px-2 py-0.5 rounded font-mono-num text-[10px] font-bold border ' +
+          (reached ? 'bg-cyan-400/20 border-cyan-400/60 text-cyan-200' : 'bg-[#0B1120] border-[#23304C] text-slate-500') + '">' +
+          step + (step === 3 ? ' · Berlabuh' : '') + '</span>';
+      }).join('');
+      var islandsHtml = vp.checkpoints.map(function(cp) {
+        var visited = playerHistory.length >= cp.questionNumber;
+        var isNext = vp.nextIsland && vp.nextIsland.islandNumber === cp.islandNumber;
+        return '<div class="rounded-lg border px-2 py-1.5 text-center transition-colors ' +
+          (visited ? 'bg-emerald-500/15 border-emerald-400/45 text-emerald-300' :
+          isNext ? 'bg-amber-400/15 border-amber-400/50 text-amber-200' :
+          'bg-[#0B1120] border-[#23304C] text-slate-500') + '">' +
+          '<div class="font-mono-num text-[10px] font-extrabold">P' + cp.islandNumber + ' #' + cp.questionNumber + '</div>' +
+          '<div class="text-[10px] font-semibold truncate">' + escapeHtml(cp.name) + '</div>' +
+        '</div>';
+      }).join('');
+      box.innerHTML =
+        '<div class="flex flex-wrap items-center justify-between gap-2 text-xs">' +
+          '<div class="flex items-center gap-2 font-bold text-cyan-300"><span>Peta Pelayaran Harta Karun</span>' +
+            (rTeam ? '<span class="px-2 py-0.5 rounded bg-sky-500/15 border border-sky-400/30 text-sky-300 text-[11px] font-bold">Tim ' + escapeHtml(rTeam) + '</span>' : '') +
+          '</div>' +
+          '<div class="font-mono-num text-[11px] text-slate-300 font-bold">Pulau ' + vp.completedIslands + '/' + vp.totalIslands + ' · Langkah ' + vp.legStep + '/3</div>' +
+        '</div>' +
+        '<div class="relative pt-4 pb-1"><div class="h-2.5 w-full rounded-full bg-[#0B1120] border border-[#23304C] overflow-hidden"><div class="h-full bg-gradient-to-r from-sky-500 via-cyan-400 to-amber-400 transition-all duration-500" style="width:' + vp.shipPercent + '%"></div></div>' +
+          '<div class="absolute -top-0.5 -translate-x-1/2 transition-all duration-500 pointer-events-none" style="left:' + shipLeft + '%"><div class="w-7 h-7 rounded-full bg-amber-400 text-slate-950 border-2 border-[#0B1120] shadow-lg flex items-center justify-center font-black text-xs anim-ship-bob" title="Kapal Kamu">⛵</div></div>' +
+        '</div>' +
+        '<div class="flex flex-wrap items-center justify-between gap-2 text-[11px]">' +
+          '<div class="flex items-center gap-1.5">' + stepsHtml + '</div>' +
+          (vp.nextIsland ? '<span class="text-slate-300 font-medium">Menuju: <strong class="text-amber-300">' + escapeHtml(vp.nextIsland.name) + '</strong> (Soal #' + vp.nextIsland.questionNumber + ')</span>' : '') +
+        '</div>' +
+        '<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-1.5">' + islandsHtml + '</div>';
     }
 
     function renderQuestionOptions() {
@@ -1003,33 +1240,53 @@ export function buildGoogleSitesScripts(
     }
 
     function updateTimerDisplay() {
+      var isGlobal = isGlobalQuizTimerActive();
       var q = playDeck[currentQuestionIndex];
-      var total = (q && q.time) || 25;
-      var pct = Math.max(0, Math.min(100, (timeLeft / total) * 100));
+      var total = isGlobal ? Math.max(1, totalGlobalSeconds) : ((q && q.time) || 25);
+      var rem = isGlobal ? globalTimeLeft : timeLeft;
+      var pct = Math.max(0, Math.min(100, (rem / total) * 100));
       var tEl = document.getElementById('timer-text');
       var bar = document.getElementById('timer-bar');
       var box = document.getElementById('quiz-timer-box');
       var hg = document.getElementById('quiz-hourglass-svg');
-      var isUrgent = !questionFeedbackShown && !isFrozen && timeLeft <= 5 && timeLeft > 0;
-      tEl.textContent = Math.max(0, timeLeft) + 'd';
-      tEl.className = timeLeft <= 5 ? 'text-rose-400 font-bold' : 'text-white';
+      var urgentThreshold = isGlobal ? 30 : 5;
+      var isUrgent = (!questionFeedbackShown || isGlobal) && !isFrozen && !dockedIslandModal && rem <= urgentThreshold && rem > 0;
+      tEl.textContent = isGlobal ? ('Sisa Kuis ' + formatCountdownClock(rem)) : (Math.max(0, rem) + 'd');
+      tEl.className = rem <= urgentThreshold ? 'text-rose-400 font-bold' : 'text-white';
       bar.style.width = pct + '%';
-      bar.className = 'h-full transition-all duration-1000 ease-linear ' + (timeLeft <= 5 ? 'bg-rose-500' : timeLeft <= 12 ? 'bg-amber-400' : 'bg-emerald-400');
+      bar.className = 'h-full transition-all duration-1000 ease-linear ' + (rem <= urgentThreshold ? 'bg-rose-500' : pct <= 45 ? 'bg-amber-400' : 'bg-emerald-400');
       if (box) box.className = 'inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold font-mono-num ' + (isUrgent ? 'text-rose-400 anim-urgent-tick' : 'text-slate-300');
       if (hg) hg.className.baseVal = 'w-4 h-4 ' + (isUrgent ? 'text-rose-400 anim-hourglass-fast' : 'text-amber-300 anim-hourglass-flip');
     }
 
     function startQuestionTimer() {
       clearInterval(timerInterval);
-      if (isFrozen || questionFeedbackShown || preCountdownValue !== null) return;
+      if (isGlobalQuizTimerActive() || isFrozen || dockedIslandModal || questionFeedbackShown || preCountdownValue !== null) return;
       timerInterval = setInterval(function() {
-        if (isFrozen || questionFeedbackShown || preCountdownValue !== null) return;
+        if (isGlobalQuizTimerActive() || isFrozen || dockedIslandModal || questionFeedbackShown || preCountdownValue !== null) return;
         timeLeft--;
         if (timeLeft <= 5 && timeLeft > 0) playUrgentTickFx();
         updateTimerDisplay();
         if (timeLeft <= 0) {
           clearInterval(timerInterval);
           handleTimeout();
+        }
+      }, 1000);
+    }
+
+    function startGlobalTimer() {
+      clearInterval(globalTimerInterval);
+      if (!isGlobalQuizTimerActive() || totalGlobalSeconds <= 0) return;
+      updateTimerDisplay();
+      globalTimerInterval = setInterval(function() {
+        if (activeScreen !== 'quiz' || preCountdownValue !== null || isFrozen || dockedIslandModal) return;
+        globalTimeLeft--;
+        if (globalTimeLeft <= 10 && globalTimeLeft > 0) playUrgentTickFx();
+        updateTimerDisplay();
+        if (globalTimeLeft <= 0) {
+          clearInterval(globalTimerInterval);
+          showToast('Waktu kuis global habis! Mengumpulkan hasil...');
+          finishQuiz();
         }
       }, 1000);
     }
@@ -1116,13 +1373,16 @@ export function buildGoogleSitesScripts(
 
     function finalizeQuestion(isCorrect, userAns, correctAns, isTimeout) {
       questionFeedbackShown = true;
+      var isGlobal = isGlobalQuizTimerActive();
       var q = playDeck[currentQuestionIndex];
-      var total = q.time || 25;
-      var timeTaken = isTimeout ? total : Math.max(1, total - timeLeft);
+      var qDur = q.time || 25;
+      var total = isGlobal ? Math.max(1, totalGlobalSeconds) : qDur;
+      var rem = isGlobal ? globalTimeLeft : timeLeft;
+      var timeTaken = isTimeout ? total : (isGlobal ? Math.max(1, Math.min(qDur, 25)) : Math.max(1, qDur - timeLeft));
       var earned = 0;
       if (isCorrect) {
-        var clamped = Math.max(0, Math.min(total, timeLeft));
-        earned = 600 + Math.round((clamped / total) * 400);
+        var clamped = Math.max(0, Math.min(total, rem));
+        earned = isGlobal ? (850 + Math.round((clamped / total) * 150)) : (600 + Math.round((clamped / total) * 400));
         if (doubleScoreActive) earned *= 2;
       }
 
@@ -1163,24 +1423,28 @@ export function buildGoogleSitesScripts(
         correctAnswer: correctAns,
         isCorrect: isCorrect,
         timeTaken: timeTaken,
-        maxTime: total,
+        maxTime: qDur,
         pointsEarned: earned,
         explanation: q.explanation
       });
 
+      renderVoyageRoadmap();
+
+      var resolvedTeam = getResolvedTeamName();
       if (!isAutostartDemo) {
         if (window.upsertActivePlayerCloud) {
           window.upsertActivePlayerCloud({
-            deviceId: myDeviceId, name: playerName, mode: currentSessionMode, score: score,
+            deviceId: myDeviceId, name: playerName, teamName: resolvedTeam || undefined, mode: currentSessionMode, score: score,
             currentQuestion: currentQuestionIndex + 1, totalQuestions: playDeck.length, startedAt: Date.now(), lastSeen: Date.now()
           });
         }
         safeSetStorage(getInProgressKey(), JSON.stringify({
-          deviceId: myDeviceId, playerName: playerName, runId: currentLiveRunId, roomCode: activeRoomCode,
+          deviceId: myDeviceId, playerName: playerName, teamName: resolvedTeam || undefined, runId: currentLiveRunId, roomCode: activeRoomCode,
           currentQuestionIndex: currentQuestionIndex, score: score, correctCount: correctCount,
           playerHistory: playerHistory, powerupInventory: powerupInventory, currentStreak: currentStreak,
           immuneQuestionsRemaining: immuneQuestionsRemaining, awardedDebuffMilestones: awardedDebuffMilestones,
-          glitchShuffleActiveForNext: glitchShuffleForNext, savedAt: Date.now()
+          glitchShuffleActiveForNext: glitchShuffleForNext, globalTimeLeftSeconds: isGlobal ? globalTimeLeft : undefined,
+          visitedIslands: visitedIslands, savedAt: Date.now()
         }));
       }
 
@@ -1206,10 +1470,13 @@ export function buildGoogleSitesScripts(
       }
       pts.textContent = '+' + earned + ' poin';
       exp.textContent = q.explanation || '';
-      nextBtn.textContent = (currentQuestionIndex + 1 < playDeck.length) ? 'Lanjut Soal Berikutnya' : 'Lihat Hasil & Leaderboard';
+
+      var vp = settings.gameplayMode === 'voyage' ? getVoyageProgressState(playerHistory.length, playDeck.length) : null;
+      var willDock = Boolean(vp && vp.dockedIsland && visitedIslands.indexOf(vp.dockedIsland.islandNumber) === -1);
+      nextBtn.textContent = willDock ? ('Berlabuh di ' + vp.dockedIsland.name) : ((currentQuestionIndex + 1 < playDeck.length) ? 'Lanjut Soal Berikutnya' : 'Lihat Hasil & Leaderboard');
     }
 
-    function nextQuestion() {
+    function advanceAfterQuestion() {
       currentQuestionIndex++;
       if (currentQuestionIndex < playDeck.length) {
         loadQuestion();
@@ -1217,6 +1484,103 @@ export function buildGoogleSitesScripts(
       } else {
         finishQuiz();
       }
+    }
+
+    function nextQuestion() {
+      var vp = settings.gameplayMode === 'voyage' ? getVoyageProgressState(playerHistory.length, playDeck.length) : null;
+      if (vp && vp.dockedIsland && visitedIslands.indexOf(vp.dockedIsland.islandNumber) === -1) {
+        playIslandDockFx();
+        openIslandMinigameModal(vp.dockedIsland);
+        return;
+      }
+      advanceAfterQuestion();
+    }
+
+    function openIslandMinigameModal(island) {
+      dockedIslandModal = island;
+      clearInterval(helmAnimInterval);
+      var ov = document.getElementById('modal-island-minigame');
+      var sub = document.getElementById('island-minigame-sub');
+      var ttl = document.getElementById('island-minigame-title');
+      var desc = document.getElementById('island-minigame-desc');
+      var body = document.getElementById('island-minigame-body');
+      sub.textContent = 'Berlabuh di Pulau #' + island.islandNumber;
+      ttl.textContent = island.name;
+      ov.classList.remove('hidden');
+
+      var kindIdx = island.islandIndex % 3;
+      if (kindIdx === 0) {
+        desc.textContent = 'Pilih 1 dari 3 peti harta karun kuno untuk memperoleh Buff atau Debuff!';
+        body.innerHTML = '<div class="grid grid-cols-3 gap-2.5">' +
+          [0, 1, 2].map(function(idx) {
+            return '<button type="button" onclick="resolveIslandMinigameReward(80)" class="arcade-btn bg-[#0B1120] hover:bg-amber-400/15 border border-[#23304C] hover:border-amber-400 rounded-xl p-4 flex flex-col items-center gap-1.5 cursor-pointer">' +
+              '<span class="text-2xl">🎁</span><span class="text-xs font-extrabold text-white">Peti #' + (idx + 1) + '</span></button>';
+          }).join('') + '</div>';
+      } else if (kindIdx === 1) {
+        desc.textContent = 'Hentikan jarum kemudi di zona tengah yang tenang untuk hadiah maksimal!';
+        body.innerHTML = '<div class="bg-[#0B1120] border border-[#23304C] rounded-xl p-4 space-y-3">' +
+          '<div class="relative h-6 rounded-full bg-slate-900 border border-[#23304C] overflow-hidden">' +
+            '<div class="absolute inset-y-0 bg-emerald-400/30 border-x border-emerald-400/60" style="left:38%;width:24%"></div>' +
+            '<div id="helm-needle-el" class="absolute inset-y-0 w-2 bg-amber-400 rounded-full" style="left:20%"></div>' +
+          '</div>' +
+          '<button type="button" onclick="stopHelmMinigame()" class="arcade-btn-amber w-full bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold py-2.5 rounded-xl cursor-pointer">Tahan Kemudi Sekarang!</button>' +
+        '</div>';
+        var pos = 12, dir = 1;
+        window._helmPos = 12;
+        helmAnimInterval = setInterval(function() {
+          pos += dir * 6;
+          if (pos >= 92) { pos = 92; dir = -1; }
+          if (pos <= 8) { pos = 8; dir = 1; }
+          window._helmPos = pos;
+          var n = document.getElementById('helm-needle-el');
+          if (n) n.style.left = 'calc(' + pos + '% - 4px)';
+        }, 48);
+      } else {
+        var dirs = ['Utara', 'Timur', 'Selatan', 'Barat'];
+        var tgt = dirs[Math.floor(Math.random() * dirs.length)];
+        window._compassTarget = tgt;
+        desc.textContent = 'Bidik arah bintang penuntun (' + tgt + ') agar kapal melaju kencang!';
+        body.innerHTML = '<div class="grid grid-cols-2 gap-2.5">' +
+          dirs.map(function(d) {
+            return '<button type="button" onclick="resolveCompassMinigame(\'' + d + '\')" class="arcade-btn bg-[#0B1120] hover:bg-sky-400/15 border border-[#23304C] hover:border-sky-400 rounded-xl p-3 text-xs font-extrabold text-white cursor-pointer">Arah ' + d + '</button>';
+          }).join('') + '</div>';
+      }
+    }
+    function stopHelmMinigame() {
+      clearInterval(helmAnimInterval);
+      var p = window._helmPos || 50;
+      var inCenter = p >= 38 && p <= 62;
+      resolveIslandMinigameReward(inCenter ? 120 : 60);
+    }
+    function resolveCompassMinigame(picked) {
+      resolveIslandMinigameReward(picked === window._compassTarget ? 120 : 60);
+    }
+    function resolveIslandMinigameReward(bonusPts) {
+      playChestRewardFx();
+      var itemId = rollPowerup(null);
+      var spec = POWERUPS[itemId];
+      var body = document.getElementById('island-minigame-body');
+      window._pendingIslandReward = { powerupId: itemId, bonusPoints: bonusPts };
+      body.innerHTML = '<div class="bg-emerald-500/10 border border-emerald-400/40 rounded-xl p-4 space-y-2">' +
+        '<div class="text-xs font-bold uppercase text-emerald-300">Harta Karun Ditemukan!</div>' +
+        '<div class="text-lg font-extrabold text-white">' + escapeHtml(spec.name) + '</div>' +
+        '<p class="text-xs text-slate-300">' + escapeHtml(spec.desc) + '</p>' +
+        '<div class="font-mono-num text-sm font-extrabold text-amber-300">+' + bonusPts + ' Poin Pelayaran</div>' +
+      '</div>' +
+      '<button type="button" onclick="claimIslandMinigameReward()" class="arcade-btn-amber w-full bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold py-3 rounded-xl cursor-pointer">Lanjutkan Berlayar</button>';
+    }
+    function claimIslandMinigameReward() {
+      playPopClickFx();
+      clearInterval(helmAnimInterval);
+      var rew = window._pendingIslandReward || { powerupId: 'DOUBLE_SCORE', bonusPoints: 80 };
+      var docked = dockedIslandModal;
+      if (docked && visitedIslands.indexOf(docked.islandNumber) === -1) visitedIslands.push(docked.islandNumber);
+      dockedIslandModal = null;
+      document.getElementById('modal-island-minigame').classList.add('hidden');
+      score += rew.bonusPoints;
+      grantPowerupToSlot(rew.powerupId, 'Berlabuh di ' + (docked ? docked.name : 'Pulau'));
+      document.getElementById('current-score').textContent = String(score);
+      advanceAfterQuestion();
     }
 
     function activatePowerup(slotIdx) {
@@ -1251,7 +1615,7 @@ export function buildGoogleSitesScripts(
         immuneQuestionsRemaining = Math.max(immuneQuestionsRemaining, 2);
         renderPowerupSlots();
         showToast('Perisai aktif! Kamu kebal terhadap Debuff lawan.');
-      } else if (id === 'FREEZE_LEADER' || id === 'GLITCH_SHUFFLE') {
+      } else if (id === 'FREEZE_LEADER' || id === 'GLITCH_SHUFFLE' || id === 'TORNADO') {
         var freshOpp = filterFreshActivePlayers(activePlayers).filter(function(p) { return p.deviceId && p.deviceId !== myDeviceId; });
         var target = null;
         if (freshOpp.length > 0) {
@@ -1308,6 +1672,42 @@ export function buildGoogleSitesScripts(
           renderPowerupSlots();
           renderQuestionOptions();
           if (!questionFeedbackShown) startQuestionTimer();
+        }
+      }, 1000);
+    }
+
+    function triggerIncomingTornado(attacker) {
+      if (activeScreen !== 'quiz') return;
+      if (immuneQuestionsRemaining > 0) {
+        showToast('Perisai menangkis badai dari ' + (attacker || 'lawan') + '!');
+        return;
+      }
+      immuneQuestionsRemaining = 1;
+      playTornadoFx();
+      clearInterval(tornadoInterval);
+      tornadoCountdown = 5;
+      tornadoAttackerName = attacker || 'Pemain lain';
+      var q = playDeck[currentQuestionIndex];
+      if (!questionFeedbackShown && q && (q.type === 'MC' || q.type === 'MS')) {
+        currentOptionOrder = computeShuffledOrder((q.options || []).length, true);
+        renderQuestionOptions();
+      }
+      var card = document.getElementById('quiz-card');
+      var banner = document.getElementById('tornado-banner');
+      var bText = document.getElementById('tornado-banner-text');
+      var bBadge = document.getElementById('tornado-countdown-badge');
+      if (card) card.classList.add('tornado-storm-active');
+      if (banner) banner.classList.remove('hidden');
+      if (bText) bText.textContent = 'Angin Puting Beliung dari ' + tornadoAttackerName + ' mengguncang layar & mengacak opsi!';
+      if (bBadge) bBadge.textContent = '5d';
+      showToast('Puting Beliung dari ' + tornadoAttackerName + ' menyerang 5 detik!');
+      tornadoInterval = setInterval(function() {
+        tornadoCountdown--;
+        if (bBadge) bBadge.textContent = Math.max(0, tornadoCountdown) + 'd';
+        if (tornadoCountdown <= 0) {
+          clearInterval(tornadoInterval);
+          if (card) card.classList.remove('tornado-storm-active');
+          if (banner) banner.classList.add('hidden');
         }
       }, 1000);
     }
@@ -1377,14 +1777,19 @@ export function buildGoogleSitesScripts(
 
     function finishQuiz() {
       clearInterval(timerInterval);
+      clearInterval(globalTimerInterval);
+      clearInterval(tornadoInterval);
+      clearInterval(helmAnimInterval);
       playFinishFx();
       renderConfetti(true);
       if (!isAutostartDemo && window.unregisterActivePlayerCloud) window.unregisterActivePlayerCloud(myDeviceId);
       safeRemoveStorage(getInProgressKey());
       recoverableProgress = null;
 
+      var resolvedTeam = getResolvedTeamName();
       var rec = {
         id: myDeviceId, deviceId: myDeviceId, name: playerName,
+        teamName: resolvedTeam || undefined,
         score: score, correct: correctCount, totalQuestions: playDeck.length,
         history: playerHistory, completedAt: new Date().toISOString()
       };
@@ -1484,6 +1889,60 @@ export function buildGoogleSitesScripts(
       }).join('');
     }
 
+    function switchLeaderboardTab(tab) {
+      playPopClickFx();
+      lbStandingsTab = tab === 'team' ? 'team' : 'individual';
+      renderLeaderboardScreen();
+    }
+
+    function openLiveLeaderboardModal() {
+      document.getElementById('modal-live-leaderboard').classList.remove('hidden');
+      renderLiveLeaderboardModal();
+    }
+    function closeLiveLeaderboardModal() {
+      document.getElementById('modal-live-leaderboard').classList.add('hidden');
+    }
+    function switchLiveLbModalTab(tab) {
+      playPopClickFx();
+      liveLbModalTab = tab === 'team' ? 'team' : 'individual';
+      renderLiveLeaderboardModal();
+    }
+    function renderLiveLeaderboardModal() {
+      var modal = document.getElementById('modal-live-leaderboard');
+      if (!modal || modal.classList.contains('hidden')) return;
+      var indBtn = document.getElementById('live-lb-tab-ind');
+      var teamBtn = document.getElementById('live-lb-tab-team');
+      var body = document.getElementById('live-lb-modal-body');
+      var merged = mergeLiveAndFinishedLeaderboard(cloudLeaderboard, activePlayers, playDeck.length || questions.length);
+      var teams = aggregateTeamLeaderboard(merged);
+      indBtn.textContent = 'Individu (' + merged.length + ')';
+      teamBtn.textContent = 'Tim / Kru (' + teams.length + ')';
+      indBtn.className = 'px-3 py-1 rounded-lg text-xs font-bold cursor-pointer ' + (liveLbModalTab === 'individual' ? 'bg-amber-400 text-slate-950' : 'text-slate-300 hover:text-white');
+      teamBtn.className = 'px-3 py-1 rounded-lg text-xs font-bold cursor-pointer ' + (liveLbModalTab === 'team' ? 'bg-amber-400 text-slate-950' : 'text-slate-300 hover:text-white');
+      if (liveLbModalTab === 'individual') {
+        body.innerHTML = merged.length === 0
+          ? '<div class="p-6 text-center text-xs text-slate-400">Belum ada peserta aktif maupun selesai.</div>'
+          : merged.map(function(row, idx) {
+              var isMe = row.deviceId === myDeviceId;
+              return '<div class="flex items-center justify-between gap-2 px-4 py-2.5 text-xs ' + (isMe ? 'bg-amber-400/10' : '') + '">' +
+                '<div class="flex items-center gap-2.5 min-w-0"><span class="font-mono-num font-bold text-slate-300 w-7">#' + (idx + 1) + '</span>' +
+                '<div class="min-w-0"><div class="font-bold text-white truncate">' + escapeHtml(row.name) + (isMe ? ' <span class="text-amber-300">(Kamu)</span>' : '') + '</div>' +
+                '<div class="text-[11px] text-slate-400">' + (row.teamName ? ('Tim ' + escapeHtml(row.teamName) + ' · ') : '') + (row.status === 'finished' ? 'Selesai' : ('Soal ' + row.currentQuestion + '/' + row.totalQuestions)) + '</div></div></div>' +
+                '<span class="font-mono-num font-extrabold text-amber-400 shrink-0">' + row.score + '</span></div>';
+            }).join('');
+      } else {
+        body.innerHTML = teams.length === 0
+          ? '<div class="p-6 text-center text-xs text-slate-400">Belum ada tim atau peserta.</div>'
+          : teams.map(function(t, idx) {
+              return '<div class="flex items-center justify-between gap-2 px-4 py-2.5 text-xs">' +
+                '<div class="flex items-center gap-2.5 min-w-0"><span class="font-mono-num font-bold text-sky-300 w-7">#' + (idx + 1) + '</span>' +
+                '<div class="min-w-0"><div class="font-bold text-white truncate">' + escapeHtml(t.teamName) + '</div>' +
+                '<div class="text-[11px] text-slate-400 truncate">' + t.memberCount + ' anggota: ' + escapeHtml(t.members.join(', ')) + '</div></div></div>' +
+                '<span class="font-mono-num font-extrabold text-amber-400 shrink-0">' + t.totalScore + '</span></div>';
+            }).join('');
+      }
+    }
+
     function renderLeaderboardScreen() {
       var sorted = cloudLeaderboard.slice().sort(function(a, b) { return (b.score || 0) - (a.score || 0); });
       var replayBtn = document.getElementById('btn-replay-quiz');
@@ -1492,10 +1951,23 @@ export function buildGoogleSitesScripts(
         replayBtn.classList.toggle('hidden', !canReplay);
       }
 
+      var hasTeams = sorted.some(function(p) { return Boolean(p.teamName && String(p.teamName).trim()); });
+      var tabsWrap = document.getElementById('lb-standings-tabs');
+      var tInd = document.getElementById('lb-tab-individual');
+      var tTeam = document.getElementById('lb-tab-team');
+      var teams = aggregateTeamLeaderboard(sorted);
+      if (tabsWrap) tabsWrap.classList.toggle('hidden', !hasTeams);
+      if (tInd && tTeam) {
+        tInd.textContent = 'Individu (' + sorted.length + ')';
+        tTeam.textContent = 'Tim / Kru (' + teams.length + ')';
+        tInd.className = 'px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer ' + (lbStandingsTab === 'individual' ? 'bg-amber-400 text-slate-950' : 'text-slate-300 hover:text-white');
+        tTeam.className = 'px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer ' + (lbStandingsTab === 'team' ? 'bg-amber-400 text-slate-950' : 'text-slate-300 hover:text-white');
+      }
+
       var sumBox = document.getElementById('lb-player-summary');
       if (mySavedRecord) {
         sumBox.classList.remove('hidden');
-        document.getElementById('lb-my-name').textContent = mySavedRecord.name;
+        document.getElementById('lb-my-name').innerHTML = escapeHtml(mySavedRecord.name) + (mySavedRecord.teamName ? (' <span class="text-xs font-bold text-sky-300">· Tim ' + escapeHtml(mySavedRecord.teamName) + '</span>') : '');
         document.getElementById('lb-my-correct').textContent = mySavedRecord.correct + '/' + (mySavedRecord.totalQuestions || playDeck.length || questions.length);
         document.getElementById('lb-my-score').textContent = String(mySavedRecord.score);
         var rankIdx = -1;
@@ -1511,24 +1983,38 @@ export function buildGoogleSitesScripts(
         sumBox.classList.add('hidden');
       }
 
+      var headEl = document.getElementById('leaderboard-table-head');
       var listEl = document.getElementById('leaderboard-list');
-      if (sorted.length === 0) {
-        listEl.innerHTML = '<div class="p-8 text-center text-sm text-slate-400">Belum ada peserta yang menyelesaikan kuis.</div>';
-      } else {
-        listEl.innerHTML = sorted.map(function(p, i) {
-          var rank = i + 1;
-          var isMe = p.deviceId === myDeviceId;
-          var badge = rank === 1 ? '<span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-400 text-slate-950 font-black">#1</span>' :
-            rank === 2 ? '<span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-slate-300 text-slate-950 font-black">#2</span>' :
-            rank === 3 ? '<span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-700 text-white font-black">#3</span>' :
-            '<span class="text-slate-300 font-bold">#' + rank + '</span>';
-          return '<div class="grid grid-cols-12 items-center px-4 py-3 text-sm ' + (isMe ? 'bg-amber-400/10 font-bold' : '') + '">' +
-            '<div class="col-span-2 flex justify-center font-mono-num">' + badge + '</div>' +
-            '<div class="col-span-5 truncate pr-2 text-white">' + escapeHtml(p.name) + (isMe ? ' <span class="text-xs text-amber-300 font-semibold">(Kamu)</span>' : '') + '</div>' +
-            '<div class="col-span-2 text-center font-mono-num text-emerald-400 font-semibold">' + (p.correct || 0) + '/' + (p.totalQuestions || questions.length) + '</div>' +
-            '<div class="col-span-3 text-right font-mono-num font-extrabold text-amber-400">' + (p.score || 0) + '</div>' +
-          '</div>';
+      if (hasTeams && lbStandingsTab === 'team') {
+        if (headEl) headEl.innerHTML = '<div class="col-span-2 text-center">Rank</div><div class="col-span-5">Tim / Kru</div><div class="col-span-2 text-center">Anggota</div><div class="col-span-3 text-right">Total Skor</div>';
+        listEl.innerHTML = teams.map(function(t, idx) {
+          return '<div class="grid grid-cols-12 items-center px-4 py-3 text-sm">' +
+            '<div class="col-span-2 text-center font-mono-num font-bold text-sky-300">#' + (idx + 1) + '</div>' +
+            '<div class="col-span-5 truncate pr-2"><div class="font-bold text-white truncate">' + escapeHtml(t.teamName) + '</div><div class="text-[11px] text-slate-400 truncate">' + escapeHtml(t.members.join(', ')) + '</div></div>' +
+            '<div class="col-span-2 text-center font-mono-num text-slate-300">' + t.memberCount + '</div>' +
+            '<div class="col-span-3 text-right font-mono-num font-extrabold text-amber-400">' + t.totalScore + '</div></div>';
         }).join('');
+      } else {
+        if (headEl) headEl.innerHTML = '<div class="col-span-2 text-center">Rank</div><div class="col-span-5">Nama Pemain</div><div class="col-span-2 text-center">Benar</div><div class="col-span-3 text-right">Skor</div>';
+        if (sorted.length === 0) {
+          listEl.innerHTML = '<div class="p-8 text-center text-sm text-slate-400">Belum ada peserta yang menyelesaikan kuis.</div>';
+        } else {
+          listEl.innerHTML = sorted.map(function(p, i) {
+            var rank = i + 1;
+            var isMe = p.deviceId === myDeviceId;
+            var badge = rank === 1 ? '<span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-400 text-slate-950 font-black">#1</span>' :
+              rank === 2 ? '<span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-slate-300 text-slate-950 font-black">#2</span>' :
+              rank === 3 ? '<span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-700 text-white font-black">#3</span>' :
+              '<span class="text-slate-300 font-bold">#' + rank + '</span>';
+            return '<div class="grid grid-cols-12 items-center px-4 py-3 text-sm ' + (isMe ? 'bg-amber-400/10 font-bold' : '') + '">' +
+              '<div class="col-span-2 flex justify-center font-mono-num">' + badge + '</div>' +
+              '<div class="col-span-5 truncate pr-2 text-white"><div class="truncate">' + escapeHtml(p.name) + (isMe ? ' <span class="text-xs text-amber-300 font-semibold">(Kamu)</span>' : '') + '</div>' +
+                (p.teamName ? ('<div class="text-[11px] text-sky-300 font-semibold truncate">Tim ' + escapeHtml(p.teamName) + '</div>') : '') + '</div>' +
+              '<div class="col-span-2 text-center font-mono-num text-emerald-400 font-semibold">' + (p.correct || 0) + '/' + (p.totalQuestions || questions.length) + '</div>' +
+              '<div class="col-span-3 text-right font-mono-num font-extrabold text-amber-400">' + (p.score || 0) + '</div>' +
+            '</div>';
+          }).join('');
+        }
       }
       renderReviewSection();
     }
@@ -1667,16 +2153,42 @@ export function buildGoogleSitesScripts(
       if (fresh.length === 0) {
         activeBox.innerHTML = '<p class="text-xs text-slate-500">Belum ada peserta yang sedang aktif menjawab kuis saat ini.</p>';
       } else {
-        activeBox.innerHTML = '<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-48 overflow-y-auto pr-1">' +
+        activeBox.innerHTML = '<div class="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">' +
           fresh.map(function(ap) {
             return '<div class="bg-[#131C31] border border-[#23304C] rounded-lg px-3 py-2 flex items-center justify-between gap-2 text-xs">' +
-              '<div class="min-w-0"><div class="font-bold text-white truncate">' + escapeHtml(ap.name) + '</div><div class="text-[11px] text-slate-400 font-mono-num">Soal ' + (ap.currentQuestion || 1) + '/' + (ap.totalQuestions || questions.length) + '</div></div>' +
+              '<div class="min-w-0"><div class="font-bold text-white truncate">' + escapeHtml(ap.name) + (ap.teamName ? (' <span class="text-sky-300">(' + escapeHtml(ap.teamName) + ')</span>') : '') + '</div><div class="text-[11px] text-slate-400 font-mono-num">Soal ' + (ap.currentQuestion || 1) + '/' + (ap.totalQuestions || questions.length) + '</div></div>' +
               '<div class="font-mono-num font-extrabold text-amber-400 shrink-0">' + (ap.score || 0) + '</div>' +
             '</div>';
           }).join('') + '</div>';
       }
 
-      // Settings Controls
+      renderAdminLiveLeaderboard();
+
+      // Gameplay, Participation, Global Timer & Settings Controls
+      var gm = settings.gameplayMode || 'classic';
+      var pm = settings.participationMode || 'either';
+      var durMins = Number(settings.quizDurationMinutes) || 0;
+      var effectiveCount = (Number(settings.questionLimit) > 0 && Number(settings.questionLimit) < questions.length) ? Number(settings.questionLimit) : questions.length;
+      var islandCount = buildVoyageCheckpoints(effectiveCount).length;
+      var islandBadge = document.getElementById('admin-voyage-island-badge');
+      if (islandBadge) islandBadge.textContent = islandCount + ' Pulau (' + effectiveCount + ' soal ÷ 5)';
+      var btnGmC = document.getElementById('btn-gameplay-classic');
+      var btnGmV = document.getElementById('btn-gameplay-voyage');
+      if (btnGmC && btnGmV) {
+        btnGmC.className = 'px-3 py-2 rounded-lg text-xs font-bold border cursor-pointer ' + (gm === 'classic' ? 'bg-amber-400 text-slate-950 border-amber-300' : 'bg-[#0B1120] text-slate-200 border-[#23304C]');
+        btnGmV.className = 'px-3 py-2 rounded-lg text-xs font-bold border cursor-pointer ' + (gm === 'voyage' ? 'bg-cyan-400 text-slate-950 border-cyan-300' : 'bg-[#0B1120] text-slate-200 border-[#23304C]');
+      }
+      ['either', 'solo', 'team'].forEach(function(pKey) {
+        var b = document.getElementById('btn-part-mode-' + pKey);
+        if (b) b.className = 'px-2 py-1.5 rounded-lg text-[11px] font-bold border cursor-pointer ' + (pm === pKey ? 'bg-amber-400 text-slate-950 border-amber-300' : 'bg-[#0B1120] text-slate-200 border-[#23304C]');
+      });
+      var timerBadge = document.getElementById('admin-timer-mode-badge');
+      if (timerBadge) timerBadge.textContent = durMins > 0 ? (durMins + ' Menit Global') : 'Per-Soal';
+      var durInp = document.getElementById('setting-quiz-duration');
+      if (durInp) durInp.value = String(durMins);
+      var liveLbChk = document.getElementById('setting-show-live-lb');
+      if (liveLbChk) liveLbChk.checked = Boolean(settings.showLiveLeaderboardToPlayers);
+
       document.getElementById('setting-allow-replay').checked = Boolean(settings.allowReplay);
       document.getElementById('setting-shuffle-questions').checked = Boolean(settings.shuffleQuestions);
       document.getElementById('setting-shuffle-options').checked = Boolean(settings.shuffleOptions);
@@ -1690,7 +2202,47 @@ export function buildGoogleSitesScripts(
       var wBox = document.getElementById('admin-waiting-list');
       wBox.innerHTML = waitingPlayers.length === 0
         ? '<span class="text-xs text-slate-500">Belum ada peserta menunggu di lobby live.</span>'
-        : waitingPlayers.map(function(p) { return '<span class="px-2.5 py-1 rounded-md bg-[#131C31] border border-[#23304C] text-xs text-slate-200 font-semibold">' + escapeHtml(p.name) + '</span>'; }).join('');
+        : waitingPlayers.map(function(p) { return '<span class="px-2.5 py-1 rounded-md bg-[#131C31] border border-[#23304C] text-xs text-slate-200 font-semibold">' + escapeHtml(p.name) + (p.teamName ? (' · ' + escapeHtml(p.teamName)) : '') + '</span>'; }).join('');
+    }
+
+    function switchAdminLbTab(tab) {
+      playPopClickFx();
+      adminLbTab = tab === 'team' ? 'team' : 'individual';
+      renderAdminLiveLeaderboard();
+    }
+    function renderAdminLiveLeaderboard() {
+      var listEl = document.getElementById('admin-live-lb-list');
+      var indBtn = document.getElementById('admin-lb-tab-ind');
+      var teamBtn = document.getElementById('admin-lb-tab-team');
+      if (!listEl) return;
+      var merged = mergeLiveAndFinishedLeaderboard(cloudLeaderboard, activePlayers, questions.length);
+      var teams = aggregateTeamLeaderboard(merged);
+      if (indBtn && teamBtn) {
+        indBtn.textContent = 'Individu (' + merged.length + ')';
+        teamBtn.textContent = 'Tim (' + teams.length + ')';
+        indBtn.className = 'px-2.5 py-1 rounded text-[11px] font-bold cursor-pointer ' + (adminLbTab === 'individual' ? 'bg-amber-400 text-slate-950' : 'text-slate-300 hover:text-white');
+        teamBtn.className = 'px-2.5 py-1 rounded text-[11px] font-bold cursor-pointer ' + (adminLbTab === 'team' ? 'bg-amber-400 text-slate-950' : 'text-slate-300 hover:text-white');
+      }
+      if (adminLbTab === 'individual') {
+        listEl.innerHTML = merged.length === 0
+          ? '<p class="text-xs text-slate-500 py-4 text-center">Belum ada data skor live maupun selesai.</p>'
+          : merged.map(function(r, i) {
+              return '<div class="flex items-center justify-between gap-2 bg-[#131C31] border border-[#23304C] rounded-lg px-3 py-1.5 text-xs">' +
+                '<div class="min-w-0 flex items-center gap-2"><span class="font-mono-num font-bold text-slate-300">#' + (i + 1) + '</span>' +
+                '<span class="font-bold text-white truncate">' + escapeHtml(r.name) + '</span>' +
+                (r.teamName ? ('<span class="text-[10px] text-sky-300 truncate">(' + escapeHtml(r.teamName) + ')</span>') : '') + '</div>' +
+                '<div class="flex items-center gap-2 shrink-0"><span class="text-[10px] ' + (r.status === 'finished' ? 'text-emerald-400' : 'text-amber-300') + '">' + (r.status === 'finished' ? 'Selesai' : ('Soal ' + r.currentQuestion)) + '</span><span class="font-mono-num font-extrabold text-amber-400">' + r.score + '</span></div></div>';
+            }).join('');
+      } else {
+        listEl.innerHTML = teams.length === 0
+          ? '<p class="text-xs text-slate-500 py-4 text-center">Belum ada data tim.</p>'
+          : teams.map(function(t, i) {
+              return '<div class="flex items-center justify-between gap-2 bg-[#131C31] border border-[#23304C] rounded-lg px-3 py-1.5 text-xs">' +
+                '<div class="min-w-0"><div class="font-bold text-white truncate">#' + (i + 1) + ' · ' + escapeHtml(t.teamName) + '</div>' +
+                '<div class="text-[10px] text-slate-400 truncate">' + t.memberCount + ' anggota</div></div>' +
+                '<span class="font-mono-num font-extrabold text-amber-400 shrink-0">' + t.totalScore + '</span></div>';
+            }).join('');
+      }
     }
 
     function saveAndSyncSettings(next) {
@@ -1704,6 +2256,31 @@ export function buildGoogleSitesScripts(
       var next = Object.assign({}, settings);
       next[key] = Boolean(checked);
       saveAndSyncSettings(next);
+    }
+    function adminSetGameplayMode(mode) {
+      playPopClickFx();
+      var next = Object.assign({}, settings, { gameplayMode: mode === 'voyage' ? 'voyage' : 'classic' });
+      saveAndSyncSettings(next);
+      showToast(next.gameplayMode === 'voyage' ? 'Mode Berlayar Harta Karun diaktifkan!' : 'Mode Kuis Klasik diaktifkan!');
+    }
+    function adminSetParticipationMode(mode) {
+      playPopClickFx();
+      var next = Object.assign({}, settings, { participationMode: mode });
+      saveAndSyncSettings(next);
+      showToast('Mode kepesertaan diatur ke: ' + mode.toUpperCase());
+    }
+    function adminSetDurationMinutes(mins) {
+      playPopClickFx();
+      var clean = Math.max(0, Math.min(180, Math.floor(Number(mins) || 0)));
+      var inp = document.getElementById('setting-quiz-duration');
+      if (inp) inp.value = String(clean);
+      var next = Object.assign({}, settings, { quizDurationMinutes: clean });
+      saveAndSyncSettings(next);
+      showToast(clean > 0 ? ('Timer kuis global diatur ke ' + clean + ' menit!') : 'Timer kembali ke mode Per-Soal.');
+    }
+    function adminApplyDurationCustom() {
+      var val = document.getElementById('setting-quiz-duration').value;
+      adminSetDurationMinutes(val);
     }
     function adminApplyQuestionLimit() {
       playPopClickFx();
@@ -2391,13 +2968,13 @@ export function buildGoogleSitesScripts(
     }
     function exportScoresCsv() {
       var sorted = cloudLeaderboard.slice().sort(function(a, b) { return (b.score || 0) - (a.score || 0); });
-      var headers = ['Rank', 'Nama Peserta', 'Benar', 'Total Soal', 'Skor', 'Soal Salah', 'Total Waktu (Detik)', 'Waktu Selesai', 'ID Perangkat'];
+      var headers = ['Rank', 'Nama Peserta', 'Tim', 'Benar', 'Total Soal', 'Skor', 'Soal Salah', 'Total Waktu (Detik)', 'Waktu Selesai', 'ID Perangkat'];
       function esc(v) { return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; }
       var rows = sorted.map(function(p, idx) {
         var hist = Array.isArray(p.history) ? p.history : [];
         var wrong = hist.map(function(h, i) { return !h.isCorrect ? ('No.' + (i + 1)) : null; }).filter(Boolean).join('; ') || 'Tidak ada';
         var totalSec = hist.reduce(function(s, h) { return s + (Number(h.timeTaken) || 0); }, 0);
-        return [idx + 1, esc(p.name), p.correct || 0, p.totalQuestions || questions.length, p.score || 0, esc(wrong), totalSec || '-', esc(p.completedAt ? new Date(p.completedAt).toLocaleString('id-ID') : '-'), esc(p.deviceId || '-')].join(',');
+        return [idx + 1, esc(p.name), esc(p.teamName || 'Solo'), p.correct || 0, p.totalQuestions || questions.length, p.score || 0, esc(wrong), totalSec || '-', esc(p.completedAt ? new Date(p.completedAt).toLocaleString('id-ID') : '-'), esc(p.deviceId || '-')].join(',');
       });
       triggerCsvDownload('\uFEFF' + [headers.join(',')].concat(rows).join('\n'), 'hasil_kuis_nusantara_' + new Date().toISOString().slice(0, 10) + '.csv');
       showToast('File CSV berhasil diunduh!');
@@ -2426,8 +3003,9 @@ export function buildGoogleSitesScripts(
         hasPlayedThisDevice = false;
       }
       updateLobbyUI();
+      renderLiveLeaderboardModal();
       if (activeScreen === 'leaderboard') renderLeaderboardScreen();
-      if (activeScreen === 'admin') renderAdminStats();
+      if (activeScreen === 'admin') { renderAdminStats(); renderAdminLiveLeaderboard(); }
     };
     window.onCloudQuestions = function(items) {
       if (Array.isArray(items) && items.length > 0) {
@@ -2444,7 +3022,7 @@ export function buildGoogleSitesScripts(
       updateLobbyUI();
     };
     window.onCloudSettings = function(cfg) {
-      if (!cfg || typeof cfg !== 'object') return;
+      if (isAutostartDemo || !cfg || typeof cfg !== 'object') return;
       settings = Object.assign({}, DEFAULT_QUIZ_SETTINGS, cfg);
       if (initialCompactFlag) settings.compactMode = true;
       safeSetStorage(getSettingsKey(), JSON.stringify(settings));
@@ -2457,11 +3035,13 @@ export function buildGoogleSitesScripts(
     };
     window.onCloudActive = function(list) {
       activePlayers = list || [];
+      renderLiveLeaderboardModal();
       if (activeScreen === 'admin') renderAdminSessionControls();
     };
     window.onCloudSabotage = function(ev) {
       if (!ev || ev.targetDeviceId !== myDeviceId || activeScreen !== 'quiz') return;
       if (ev.type === 'FREEZE_LEADER') triggerIncomingFreeze(ev.attackerName);
+      else if (ev.type === 'TORNADO') triggerIncomingTornado(ev.attackerName);
       else if (ev.type === 'GLITCH_SHUFFLE') {
         if (immuneQuestionsRemaining > 0) {
           showToast('Perisai menangkis serangan ' + (ev.attackerName || 'lawan') + '!');
@@ -2476,9 +3056,17 @@ export function buildGoogleSitesScripts(
 
     // Init UI immediately
     updateMuteButtonsUI();
-    updateLobbyUI();
     if (isAutostartDemo) {
+      if (readUrlParam('voyage') === '1') settings.gameplayMode = 'voyage';
+      var tParam = Number(readUrlParam('timer') || 0);
+      if (isFinite(tParam) && tParam > 0) settings.quizDurationMinutes = tParam;
+      var tmParam = (readUrlParam('team') || '').trim();
+      if (tmParam) { teamModeChoice = 'team'; teamName = tmParam; }
+      if (readUrlParam('live_lb') === '1') settings.showLiveLeaderboardToPlayers = true;
+      updateLobbyUI();
       startGameplay('Pemain Uji', 'free', 'autostart', true, true);
+    } else {
+      updateLobbyUI();
     }
   </script>
 

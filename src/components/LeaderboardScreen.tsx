@@ -8,10 +8,14 @@ import {
   Medal,
   RefreshCw,
   RotateCcw,
+  Users,
   Volume2,
   VolumeX,
 } from 'lucide-react';
-import { getPlayerRankInfo } from '../quiz/engine';
+import {
+  aggregateTeamLeaderboard,
+  getPlayerRankInfo,
+} from '../quiz/engine';
 import { playPopClickFx } from '../quiz/soundFx';
 import type { PlayerRecord } from '../quiz/types';
 import { GleamingTrophyIcon } from './AnimatedIcons';
@@ -46,10 +50,23 @@ export const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({
 }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [reviewFilter, setReviewFilter] = useState<'all' | 'wrong'>('all');
+  const [standingsTab, setStandingsTab] = useState<'individual' | 'team'>(
+    'individual'
+  );
 
   const sorted = useMemo(
     () => [...leaderboard].sort((a, b) => (b.score || 0) - (a.score || 0)),
     [leaderboard]
+  );
+
+  const teamStandings = useMemo(
+    () => aggregateTeamLeaderboard(sorted),
+    [sorted]
+  );
+
+  const hasAnyTeams = useMemo(
+    () => sorted.some((p) => Boolean(p.teamName && p.teamName.trim())),
+    [sorted]
   );
 
   const rankInfo = useMemo(
@@ -163,6 +180,11 @@ export const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({
             </div>
             <div className="text-lg sm:text-xl font-extrabold text-white mt-0.5">
               {playerResult.name}
+              {playerResult.teamName && (
+                <span className="ml-2 text-xs font-bold text-sky-300">
+                  · Tim {playerResult.teamName}
+                </span>
+              )}
             </div>
             {rankInfo.rank !== null && (
               <div className="text-xs font-bold text-amber-300 mt-1 font-mono-num">
@@ -188,68 +210,146 @@ export const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({
         </div>
       )}
 
-      {/* Tabel Leaderboard */}
-      <div className="relative z-10 bg-[#0B1120] border border-[#23304C] rounded-xl overflow-hidden mb-7">
-        <div className="grid grid-cols-12 px-4 py-3 text-xs font-semibold text-slate-400 border-b border-[#23304C]">
-          <div className="col-span-2 text-center">Rank</div>
-          <div className="col-span-5">Nama Pemain</div>
-          <div className="col-span-2 text-center">Benar</div>
-          <div className="col-span-3 text-right">Skor</div>
+      {/* Tab Klasemen Individu vs Tim (bila ada peserta bertim) */}
+      {hasAnyTeams && (
+        <div className="relative z-10 inline-flex items-center gap-1 p-1 bg-[#0B1120] border border-[#23304C] rounded-xl mb-3">
+          <button
+            type="button"
+            onClick={() => {
+              playPopClickFx();
+              setStandingsTab('individual');
+            }}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${
+              standingsTab === 'individual'
+                ? 'bg-amber-400 text-slate-950'
+                : 'text-slate-300 hover:text-white'
+            }`}
+          >
+            Individu ({sorted.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              playPopClickFx();
+              setStandingsTab('team');
+            }}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer inline-flex items-center gap-1.5 ${
+              standingsTab === 'team'
+                ? 'bg-amber-400 text-slate-950'
+                : 'text-slate-300 hover:text-white'
+            }`}
+          >
+            <Users className="w-3.5 h-3.5" /> Tim / Kru ({teamStandings.length})
+          </button>
         </div>
+      )}
 
-        <div className="divide-y divide-[#23304C]/70 max-h-80 overflow-y-auto">
-          {sorted.length === 0 ? (
-            <div className="p-8 text-center text-sm text-slate-400">
-              Belum ada peserta yang menyelesaikan kuis.
-            </div>
-          ) : (
-            sorted.map((player, index) => {
-              const rank = index + 1;
-              const isMe = player.deviceId === deviceId;
-              return (
-                <div
-                  key={player.deviceId || `${player.name}-${index}`}
-                  className={`grid grid-cols-12 items-center px-4 py-3 text-sm ${
-                    isMe ? 'bg-amber-400/10 font-bold' : ''
-                  }`}
-                >
-                  <div className="col-span-2 flex justify-center font-mono-num">
-                    {rank === 1 ? (
-                      <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-400 text-slate-950">
-                        <Crown className="w-3.5 h-3.5" />
-                      </span>
-                    ) : rank === 2 ? (
-                      <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-slate-300 text-slate-950">
-                        <Medal className="w-3.5 h-3.5" />
-                      </span>
-                    ) : rank === 3 ? (
-                      <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-700 text-white">
-                        <Award className="w-3.5 h-3.5" />
-                      </span>
-                    ) : (
-                      <span className="text-slate-300 font-bold">#{rank}</span>
-                    )}
+      {/* Tabel Leaderboard */}
+      {standingsTab === 'individual' || !hasAnyTeams ? (
+        <div className="relative z-10 bg-[#0B1120] border border-[#23304C] rounded-xl overflow-hidden mb-7">
+          <div className="grid grid-cols-12 px-4 py-3 text-xs font-semibold text-slate-400 border-b border-[#23304C]">
+            <div className="col-span-2 text-center">Rank</div>
+            <div className="col-span-5">Nama Pemain</div>
+            <div className="col-span-2 text-center">Benar</div>
+            <div className="col-span-3 text-right">Skor</div>
+          </div>
+
+          <div className="divide-y divide-[#23304C]/70 max-h-80 overflow-y-auto">
+            {sorted.length === 0 ? (
+              <div className="p-8 text-center text-sm text-slate-400">
+                Belum ada peserta yang menyelesaikan kuis.
+              </div>
+            ) : (
+              sorted.map((player, index) => {
+                const rank = index + 1;
+                const isMe = player.deviceId === deviceId;
+                return (
+                  <div
+                    key={player.deviceId || `${player.name}-${index}`}
+                    className={`grid grid-cols-12 items-center px-4 py-3 text-sm ${
+                      isMe ? 'bg-amber-400/10 font-bold' : ''
+                    }`}
+                  >
+                    <div className="col-span-2 flex justify-center font-mono-num">
+                      {rank === 1 ? (
+                        <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-400 text-slate-950">
+                          <Crown className="w-3.5 h-3.5" />
+                        </span>
+                      ) : rank === 2 ? (
+                        <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-slate-300 text-slate-950">
+                          <Medal className="w-3.5 h-3.5" />
+                        </span>
+                      ) : rank === 3 ? (
+                        <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-700 text-white">
+                          <Award className="w-3.5 h-3.5" />
+                        </span>
+                      ) : (
+                        <span className="text-slate-300 font-bold">#{rank}</span>
+                      )}
+                    </div>
+                    <div className="col-span-5 truncate pr-2 text-white">
+                      <div className="truncate">
+                        {player.name}
+                        {isMe && (
+                          <span className="ml-1.5 text-xs text-amber-300 font-semibold">
+                            (Kamu)
+                          </span>
+                        )}
+                      </div>
+                      {player.teamName && (
+                        <div className="text-[11px] text-sky-300 font-semibold truncate">
+                          Tim {player.teamName}
+                        </div>
+                      )}
+                    </div>
+                    <div className="col-span-2 text-center font-mono-num text-emerald-400 font-semibold">
+                      {player.correct}/{player.totalQuestions || totalQuestions}
+                    </div>
+                    <div className="col-span-3 text-right font-mono-num font-extrabold text-amber-400">
+                      {player.score}
+                    </div>
                   </div>
-                  <div className="col-span-5 truncate pr-2 text-white">
-                    {player.name}
-                    {isMe && (
-                      <span className="ml-1.5 text-xs text-amber-300 font-semibold">
-                        (Kamu)
-                      </span>
-                    )}
+                );
+              })
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="relative z-10 bg-[#0B1120] border border-[#23304C] rounded-xl overflow-hidden mb-7">
+          <div className="grid grid-cols-12 px-4 py-3 text-xs font-semibold text-slate-400 border-b border-[#23304C]">
+            <div className="col-span-2 text-center">Rank</div>
+            <div className="col-span-5">Tim / Kru</div>
+            <div className="col-span-2 text-center">Anggota</div>
+            <div className="col-span-3 text-right">Total Skor</div>
+          </div>
+          <div className="divide-y divide-[#23304C]/70 max-h-80 overflow-y-auto">
+            {teamStandings.map((team, idx) => (
+              <div
+                key={team.teamName}
+                className="grid grid-cols-12 items-center px-4 py-3 text-sm"
+              >
+                <div className="col-span-2 text-center font-mono-num font-bold text-sky-300">
+                  #{idx + 1}
+                </div>
+                <div className="col-span-5 truncate pr-2">
+                  <div className="font-bold text-white truncate">
+                    {team.teamName}
                   </div>
-                  <div className="col-span-2 text-center font-mono-num text-emerald-400 font-semibold">
-                    {player.correct}/{player.totalQuestions || totalQuestions}
-                  </div>
-                  <div className="col-span-3 text-right font-mono-num font-extrabold text-amber-400">
-                    {player.score}
+                  <div className="text-[11px] text-slate-400 truncate">
+                    {team.members.join(', ')}
                   </div>
                 </div>
-              );
-            })
-          )}
+                <div className="col-span-2 text-center font-mono-num text-slate-300">
+                  {team.memberCount}
+                </div>
+                <div className="col-span-3 text-right font-mono-num font-extrabold text-amber-400">
+                  {team.totalScore}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Kunci Jawaban & Pembahasan + Filter Salah Saja */}
       {playerResult &&

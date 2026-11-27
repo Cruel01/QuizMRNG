@@ -121,6 +121,28 @@ export function playFreezeFx() {
   playTone(523.25, 0.22, 'sine', 0.06, 0.12);
 }
 
+/** Swirling windstorm synth for Puting Beliung debuff */
+export function playTornadoFx() {
+  playTone(180, 0.28, 'sawtooth', 0.045, 0, 520);
+  playTone(480, 0.3, 'triangle', 0.055, 0.14, 190);
+  playTone(220, 0.34, 'sawtooth', 0.04, 0.28, 620);
+}
+
+/** Ship harbor chime when docking at an island checkpoint */
+export function playIslandDockFx() {
+  playTone(392.0, 0.12, 'triangle', 0.08, 0);
+  playTone(523.25, 0.14, 'triangle', 0.085, 0.1);
+  playTone(659.25, 0.22, 'sine', 0.08, 0.2);
+}
+
+/** Sparkling treasure chest unlock sound */
+export function playChestRewardFx() {
+  playTone(659.25, 0.08, 'triangle', 0.08, 0);
+  playTone(880.0, 0.1, 'triangle', 0.085, 0.07);
+  playTone(1046.5, 0.12, 'sine', 0.08, 0.14);
+  playTone(1318.51, 0.24, 'sine', 0.08, 0.21);
+}
+
 export function playFinishFx() {
   playTone(523.25, 0.11, 'triangle', 0.08, 0);
   playTone(659.25, 0.11, 'triangle', 0.08, 0.09);

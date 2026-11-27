@@ -18,6 +18,10 @@ export interface Question {
   explanation: string;
 }
 
+export type GameplayMode = 'classic' | 'voyage';
+
+export type ParticipationMode = 'solo' | 'team' | 'either';
+
 export interface QuizSettings {
   allowReplay: boolean;
   shuffleQuestions: boolean;
@@ -25,6 +29,10 @@ export interface QuizSettings {
   questionLimit: number;
   compactMode: boolean;
   adminPin: string;
+  quizDurationMinutes: number;
+  gameplayMode: GameplayMode;
+  participationMode: ParticipationMode;
+  showLiveLeaderboardToPlayers: boolean;
   updatedAt?: number;
 }
 
@@ -33,7 +41,8 @@ export type PowerupId =
   | 'FIFTY_FIFTY'
   | 'SHIELD'
   | 'FREEZE_LEADER'
-  | 'GLITCH_SHUFFLE';
+  | 'GLITCH_SHUFFLE'
+  | 'TORNADO';
 
 export type PowerupKind = 'buff' | 'debuff';
 
@@ -64,6 +73,7 @@ export interface PlayerRecord {
   id: string;
   deviceId: string;
   name: string;
+  teamName?: string;
   score: number;
   correct: number;
   totalQuestions: number;
@@ -86,12 +96,14 @@ export interface SessionState {
 export interface WaitingPlayer {
   deviceId: string;
   name: string;
+  teamName?: string;
   joinedAt: number;
 }
 
 export interface ActivePlayer {
   deviceId: string;
   name: string;
+  teamName?: string;
   mode: SessionMode;
   score?: number;
   currentQuestion?: number;
@@ -105,13 +117,14 @@ export interface SabotageEvent {
   targetName: string;
   attackerDeviceId: string;
   attackerName: string;
-  type: 'FREEZE_LEADER' | 'GLITCH_SHUFFLE';
+  type: 'FREEZE_LEADER' | 'GLITCH_SHUFFLE' | 'TORNADO';
   createdAt: number;
 }
 
 export interface InProgressState {
   deviceId: string;
   playerName: string;
+  teamName?: string;
   runId: string;
   roomCode?: string;
   questionIds?: string[];
@@ -124,7 +137,50 @@ export interface InProgressState {
   immuneQuestionsRemaining: number;
   awardedDebuffMilestones: number[];
   glitchShuffleActiveForNext: boolean;
+  globalTimeLeftSeconds?: number;
+  visitedIslands?: number[];
   savedAt: number;
+}
+
+export interface VoyageCheckpoint {
+  islandIndex: number;
+  islandNumber: number;
+  name: string;
+  questionNumber: number;
+  legStartQuestion: number;
+  positionPercent: number;
+}
+
+export interface VoyageProgressState {
+  checkpoints: VoyageCheckpoint[];
+  totalIslands: number;
+  completedIslands: number;
+  currentLegIndex: number;
+  legStep: 0 | 1 | 2 | 3;
+  nextIsland: VoyageCheckpoint | null;
+  dockedIsland: VoyageCheckpoint | null;
+  shipPercent: number;
+}
+
+export interface TeamLeaderboardEntry {
+  teamName: string;
+  isSolo: boolean;
+  memberCount: number;
+  members: string[];
+  totalScore: number;
+  avgScore: number;
+  totalCorrect: number;
+}
+
+export interface MergedLeaderboardRow {
+  deviceId: string;
+  name: string;
+  teamName?: string;
+  score: number;
+  correct: number;
+  currentQuestion: number;
+  totalQuestions: number;
+  status: 'finished' | 'playing';
 }
 
 export type CloudStatus = 'connecting' | 'connected' | 'error';

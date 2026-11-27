@@ -10,6 +10,10 @@ export const DEFAULT_QUIZ_SETTINGS: QuizSettings = {
   questionLimit: 0,
   compactMode: false,
   adminPin: ADMIN_PIN,
+  quizDurationMinutes: 0,
+  gameplayMode: 'classic',
+  participationMode: 'either',
+  showLiveLeaderboardToPlayers: false,
 };
 
 export const DEFAULT_QUESTIONS: Question[] = [
@@ -435,7 +439,15 @@ export const POWERUP_CATALOG: Record<PowerupId, PowerupSpec> = {
     name: 'Acak Opsi',
     kind: 'debuff',
     rarity: 'COMMON',
-    weight: 25,
+    weight: 20,
     desc: 'Mengacak posisi tombol opsi lawan pada soal berikutnya.',
+  },
+  TORNADO: {
+    id: 'TORNADO',
+    name: 'Puting Beliung',
+    kind: 'debuff',
+    rarity: 'LEGENDARY',
+    weight: 20,
+    desc: 'Mengirim badai puting beliung ke pemain lain: layar berguncang hebat & posisi opsi kacau selama 5 detik!',
   },
 };

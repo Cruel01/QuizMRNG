@@ -1,12 +1,16 @@
 import { MAX_POWERUP_SLOTS, POWERUP_CATALOG } from './questions';
 import type {
   ActivePlayer,
+  MergedLeaderboardRow,
   PlayerRecord,
   PowerupId,
   PowerupKind,
   Question,
   QuizSettings,
   SessionMode,
+  TeamLeaderboardEntry,
+  VoyageCheckpoint,
+  VoyageProgressState,
   WaitingPlayer,
 } from './types';
 
@@ -279,17 +283,196 @@ export function getCorrectAnswerDisplay(question: Question): string {
   return ((question.acceptedAnswers || [])[0] || '').toUpperCase();
 }
 
+export function isGlobalQuizTimerActive(
+  sessionMode: SessionMode,
+  settings: Pick<QuizSettings, 'quizDurationMinutes'>
+): boolean {
+  const mins = Number(settings.quizDurationMinutes) || 0;
+  if (mins <= 0) return false;
+  return sessionMode !== 'unconfigured';
+}
+
+export function formatCountdownClock(totalSeconds: number): string {
+  const safe = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+  const mins = Math.floor(safe / 60);
+  const secs = safe % 60;
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
+
+export const VOYAGE_ISLAND_NAMES = [
+  'Pulau Rempah Maluku',
+  'Teluk Karang Raja Ampat',
+  'Tanjung Komodo',
+  'Selat Keris Jawa',
+  'Pantai Zamrud Sumatera',
+  'Pulau Harta Karun Nusantara',
+];
+
+export function buildVoyageCheckpoints(totalQuestions: number): VoyageCheckpoint[] {
+  const safeTotal = Math.max(1, Math.floor(Number(totalQuestions) || 1));
+  const totalIslands = safeTotal < 5 ? 1 : Math.floor(safeTotal / 5);
+  const checkpoints: VoyageCheckpoint[] = [];
+  for (let i = 0; i < totalIslands; i++) {
+    const qNum = safeTotal < 5 ? safeTotal : Math.min(safeTotal, (i + 1) * 5);
+    const prevQ = i === 0 ? 0 : checkpoints[i - 1].questionNumber;
+    const baseName =
+      i === totalIslands - 1
+        ? VOYAGE_ISLAND_NAMES[VOYAGE_ISLAND_NAMES.length - 1]
+        : VOYAGE_ISLAND_NAMES[i % (VOYAGE_ISLAND_NAMES.length - 1)];
+    checkpoints.push({
+      islandIndex: i,
+      islandNumber: i + 1,
+      name:
+        totalIslands > VOYAGE_ISLAND_NAMES.length && i < totalIslands - 1
+          ? `${baseName} ${Math.floor(i / (VOYAGE_ISLAND_NAMES.length - 1)) + 1}`
+          : baseName,
+      questionNumber: qNum,
+      legStartQuestion: prevQ + 1,
+      positionPercent: Math.round((qNum / safeTotal) * 100),
+    });
+  }
+  return checkpoints;
+}
+
+export function getVoyageProgressState(
+  answeredCount: number,
+  totalQuestions: number
+): VoyageProgressState {
+  const safeTotal = Math.max(1, Math.floor(Number(totalQuestions) || 1));
+  const safeAnswered = Math.max(0, Math.min(safeTotal, Math.floor(answeredCount || 0)));
+  const checkpoints = buildVoyageCheckpoints(safeTotal);
+  const totalIslands = checkpoints.length;
+
+  let completedIslands = 0;
+  for (const cp of checkpoints) {
+    if (safeAnswered >= cp.questionNumber) completedIslands++;
+  }
+
+  const dockedIsland =
+    safeAnswered > 0
+      ? checkpoints.find((cp) => cp.questionNumber === safeAnswered) || null
+      : null;
+
+  const currentLegIndex = Math.min(
+    totalIslands - 1,
+    completedIslands >= totalIslands ? totalIslands - 1 : completedIslands
+  );
+  const targetIsland = checkpoints[currentLegIndex] || null;
+  const legStart = targetIsland ? targetIsland.legStartQuestion - 1 : 0;
+  const legEnd = targetIsland ? targetIsland.questionNumber : safeTotal;
+  const legSpan = Math.max(1, legEnd - legStart);
+  const qInLeg = dockedIsland
+    ? legSpan
+    : Math.max(0, safeAnswered - legStart);
+
+  let legStep: 0 | 1 | 2 | 3 = 0;
+  if (dockedIsland || qInLeg >= legSpan) {
+    legStep = 3;
+  } else if (qInLeg >= Math.max(3, Math.ceil(legSpan * 0.6))) {
+    legStep = 2;
+  } else if (qInLeg >= 1) {
+    legStep = 1;
+  }
+
+  return {
+    checkpoints,
+    totalIslands,
+    completedIslands,
+    currentLegIndex,
+    legStep,
+    nextIsland: targetIsland,
+    dockedIsland,
+    shipPercent: Math.min(100, Math.round((safeAnswered / safeTotal) * 100)),
+  };
+}
+
+export function aggregateTeamLeaderboard(
+  records: Array<
+    Pick<PlayerRecord, 'name' | 'teamName' | 'score' | 'correct'>
+  >
+): TeamLeaderboardEntry[] {
+  const map = new Map<string, TeamLeaderboardEntry>();
+  for (const rec of records) {
+    const rawTeam = (rec.teamName || '').trim();
+    const isSolo = !rawTeam;
+    const key = isSolo
+      ? `SOLO::${(rec.name || 'Peserta').trim().toLowerCase()}`
+      : `TEAM::${rawTeam.toLowerCase()}`;
+    const displayName = isSolo ? `Solo · ${rec.name || 'Peserta'}` : rawTeam;
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, {
+        teamName: displayName,
+        isSolo,
+        memberCount: 1,
+        members: [rec.name || 'Peserta'],
+        totalScore: rec.score || 0,
+        avgScore: rec.score || 0,
+        totalCorrect: rec.correct || 0,
+      });
+    } else {
+      existing.memberCount += 1;
+      existing.members.push(rec.name || 'Peserta');
+      existing.totalScore += rec.score || 0;
+      existing.totalCorrect += rec.correct || 0;
+      existing.avgScore = Math.round(existing.totalScore / existing.memberCount);
+    }
+  }
+  return Array.from(map.values()).sort((a, b) => b.totalScore - a.totalScore);
+}
+
+export function mergeLiveAndFinishedLeaderboard(
+  finished: PlayerRecord[],
+  activePlayers: ActivePlayer[],
+  defaultTotalQuestions: number,
+  now: number = Date.now()
+): MergedLeaderboardRow[] {
+  const map = new Map<string, MergedLeaderboardRow>();
+
+  for (const p of finished) {
+    const id = p.deviceId || p.id;
+    map.set(id, {
+      deviceId: id,
+      name: p.name,
+      teamName: p.teamName,
+      score: p.score || 0,
+      correct: p.correct || 0,
+      currentQuestion: p.totalQuestions || defaultTotalQuestions,
+      totalQuestions: p.totalQuestions || defaultTotalQuestions,
+      status: 'finished',
+    });
+  }
+
+  for (const ap of filterFreshActivePlayers(activePlayers, now)) {
+    if (!ap.deviceId || map.has(ap.deviceId)) continue;
+    map.set(ap.deviceId, {
+      deviceId: ap.deviceId,
+      name: ap.name,
+      teamName: ap.teamName,
+      score: ap.score ?? 0,
+      correct: 0,
+      currentQuestion: ap.currentQuestion || 1,
+      totalQuestions: ap.totalQuestions || defaultTotalQuestions,
+      status: 'playing',
+    });
+  }
+
+  return Array.from(map.values()).sort((a, b) => b.score - a.score);
+}
+
 export function calculateEarnedPoints(
   isCorrect: boolean,
   timeLeft: number,
   totalTime: number,
-  doubleScoreActive: boolean
+  doubleScoreActive: boolean,
+  isGlobalTimer: boolean = false
 ): number {
   if (!isCorrect) return 0;
   const safeTotal = Math.max(1, totalTime);
   const clampedLeft = Math.max(0, Math.min(safeTotal, timeLeft));
-  const speedBonus = Math.round((clampedLeft / safeTotal) * 400);
-  const base = 600 + speedBonus;
+  const base = isGlobalTimer
+    ? 850 + Math.round((clampedLeft / safeTotal) * 150)
+    : 600 + Math.round((clampedLeft / safeTotal) * 400);
   return doubleScoreActive ? base * 2 : base;
 }
 
@@ -490,6 +673,7 @@ export function buildCsvContent(
   const headers = [
     'Rank',
     'Nama Peserta',
+    'Tim',
     'Benar',
     'Total Soal',
     'Skor',
@@ -530,6 +714,7 @@ export function buildCsvContent(
     return [
       idx + 1,
       escapeCell(p.name || ''),
+      escapeCell(p.teamName || 'Solo'),
       p.correct || 0,
       p.totalQuestions || questions.length,
       p.score || 0,

@@ -9,6 +9,8 @@ import {
   Shuffle,
   Snowflake,
   Star,
+  Tornado,
+  Trophy,
   Volume2,
   VolumeX,
   X,
@@ -16,13 +18,21 @@ import {
 } from 'lucide-react';
 import { POWERUP_CATALOG } from '../quiz/questions';
 import {
+  formatCountdownClock,
   getDebuffMilestones,
   getStreakRewardTarget,
   sanitizeImageUrl,
 } from '../quiz/engine';
 import { playPopClickFx } from '../quiz/soundFx';
-import type { PowerupId, Question } from '../quiz/types';
+import type {
+  ActivePlayer,
+  GameplayMode,
+  PowerupId,
+  Question,
+  VoyageProgressState,
+} from '../quiz/types';
 import { AnimatedFlameIcon, SpinningHourglassIcon } from './AnimatedIcons';
+import { VoyageRoadmap } from './VoyageRoadmap';
 
 export interface QuestionFeedbackState {
   isCorrect: boolean;
@@ -37,8 +47,19 @@ interface QuizScreenProps {
   question: Question;
   questionIndex: number;
   totalQuestions: number;
+  answeredCount: number;
   score: number;
   timeLeft: number;
+  isGlobalTimer: boolean;
+  globalTimeLeft: number;
+  totalGlobalSeconds: number;
+  gameplayMode: GameplayMode;
+  voyageProgress: VoyageProgressState | null;
+  teamName?: string;
+  activePlayers: ActivePlayer[];
+  selfDeviceId: string;
+  showLiveLeaderboardToPlayers: boolean;
+  onOpenLiveLeaderboard: () => void;
   currentStreak: number;
   compactMode: boolean;
   powerupInventory: (PowerupId | null)[];
@@ -48,6 +69,8 @@ interface QuizScreenProps {
   isFrozen: boolean;
   freezeCountdown: number;
   freezeAttackerName: string;
+  tornadoCountdown: number;
+  tornadoAttackerName: string;
   optionOrder: number[];
   eliminatedIndices: number[];
   selectedSingleIndex: number | null;
@@ -77,6 +100,8 @@ function PowerupIcon({ id }: { id: PowerupId }) {
       return <Snowflake className="w-3.5 h-3.5 text-cyan-300 shrink-0" />;
     case 'GLITCH_SHUFFLE':
       return <Shuffle className="w-3.5 h-3.5 text-fuchsia-300 shrink-0" />;
+    case 'TORNADO':
+      return <Tornado className="w-3.5 h-3.5 text-rose-300 shrink-0" />;
   }
 }
 
@@ -84,8 +109,19 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
   question,
   questionIndex,
   totalQuestions,
+  answeredCount,
   score,
   timeLeft,
+  isGlobalTimer,
+  globalTimeLeft,
+  totalGlobalSeconds,
+  gameplayMode,
+  voyageProgress,
+  teamName,
+  activePlayers,
+  selfDeviceId,
+  showLiveLeaderboardToPlayers,
+  onOpenLiveLeaderboard,
   currentStreak,
   compactMode,
   powerupInventory,
@@ -95,6 +131,8 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
   isFrozen,
   freezeCountdown,
   freezeAttackerName,
+  tornadoCountdown,
+  tornadoAttackerName,
   optionOrder,
   eliminatedIndices,
   selectedSingleIndex,
@@ -202,11 +240,27 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
     selectedMultipleIndices.length,
   ]);
 
-  const totalTime = question.time || 25;
-  const timerPct = Math.max(0, Math.min(100, (timeLeft / totalTime) * 100));
-  const isUrgent = !feedback && !isFrozen && timeLeft <= 5 && timeLeft > 0;
+  const activeTimerMax = isGlobalTimer
+    ? Math.max(1, totalGlobalSeconds)
+    : question.time || 25;
+  const activeTimerVal = isGlobalTimer ? globalTimeLeft : timeLeft;
+  const timerPct = Math.max(
+    0,
+    Math.min(100, (activeTimerVal / activeTimerMax) * 100)
+  );
+  const urgentThreshold = isGlobalTimer ? 60 : 5;
+  const warnThreshold = isGlobalTimer ? 180 : 12;
+  const isUrgent =
+    !isFrozen &&
+    activeTimerVal <= urgentThreshold &&
+    activeTimerVal > 0 &&
+    (isGlobalTimer || !feedback);
   const streakTarget = getStreakRewardTarget(totalQuestions);
   const milestones = getDebuffMilestones(totalQuestions);
+  const willDockAfterThis =
+    gameplayMode === 'voyage' &&
+    Boolean(feedback) &&
+    Boolean(voyageProgress?.dockedIsland);
 
   const typeLabelMap: Record<Question['type'], string> = {
     MC: 'Pilihan Ganda',
@@ -263,8 +317,9 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
             </div>
           )}
 
-          {/* Spinning Hourglass Timer */}
+          {/* Spinning Hourglass Timer (Global vs Per-Question) */}
           <div
+            data-testid="quiz-timer-display"
             className={`inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold font-mono-num ${
               isUrgent ? 'text-rose-400 anim-urgent-tick' : 'text-slate-300'
             }`}
@@ -275,8 +330,21 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
                 isUrgent ? 'text-rose-400' : 'text-amber-300'
               }`}
             />
-            <span className={timeLeft <= 5 ? 'text-rose-400 font-bold' : 'text-white'}>
-              {Math.max(0, timeLeft)}d
+            {isGlobalTimer && (
+              <span className="hidden sm:inline text-[11px] text-slate-400 font-sans">
+                Sisa Kuis
+              </span>
+            )}
+            <span
+              className={
+                activeTimerVal <= urgentThreshold
+                  ? 'text-rose-400 font-bold'
+                  : 'text-white'
+              }
+            >
+              {isGlobalTimer
+                ? formatCountdownClock(globalTimeLeft)
+                : `${Math.max(0, timeLeft)}d`}
             </span>
           </div>
 
@@ -305,6 +373,22 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
             </AnimatePresence>
           </div>
 
+          {showLiveLeaderboardToPlayers && (
+            <button
+              type="button"
+              onClick={() => {
+                playPopClickFx();
+                onOpenLiveLeaderboard();
+              }}
+              aria-label="Lihat klasemen sementara"
+              title="Klasemen Sementara"
+              className="arcade-btn px-2.5 py-2 rounded-lg bg-[#0B1120] border border-[#23304C] text-xs font-bold text-amber-300 hover:bg-slate-800 inline-flex items-center gap-1 cursor-pointer"
+            >
+              <Trophy className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Klasemen</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={onToggleMute}
@@ -324,23 +408,35 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
       {/* Timer Progress Bar */}
       <div
         role="progressbar"
-        aria-valuenow={Math.max(0, timeLeft)}
+        aria-valuenow={Math.max(0, activeTimerVal)}
         aria-valuemin={0}
-        aria-valuemax={totalTime}
-        aria-label="Sisa waktu soal"
+        aria-valuemax={activeTimerMax}
+        aria-label={isGlobalTimer ? 'Sisa waktu kuis global' : 'Sisa waktu soal'}
         className="w-full bg-[#0B1120] border border-[#23304C] h-2 rounded-full overflow-hidden"
       >
         <div
           className={`h-full transition-all duration-1000 ease-linear ${
-            timeLeft <= 5
+            activeTimerVal <= urgentThreshold
               ? 'bg-rose-500'
-              : timeLeft <= 12
+              : activeTimerVal <= warnThreshold
                 ? 'bg-amber-400'
                 : 'bg-emerald-400'
           }`}
           style={{ width: `${timerPct}%` }}
         />
       </div>
+
+      {/* Voyage Sea Roadmap (Mode Berlayar Mencari Harta Karun) */}
+      {gameplayMode === 'voyage' && voyageProgress && (
+        <VoyageRoadmap
+          progress={voyageProgress}
+          answeredCount={answeredCount}
+          totalQuestions={totalQuestions}
+          teamName={teamName}
+          activePlayers={activePlayers}
+          selfDeviceId={selfDeviceId}
+        />
+      )}
 
       {/* Inventory Buff & Debuff (Maks 2 Slot) + Segmented Streak Tracker */}
       <div className="bg-[#131C31] border border-[#23304C] rounded-xl p-3 sm:px-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -440,8 +536,27 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
         transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
         className={`relative bg-[#131C31] border border-[#23304C] rounded-2xl shadow-xl overflow-hidden ${
           compactMode ? 'p-4 sm:p-6' : 'p-5 sm:p-8'
-        }`}
+        } ${tornadoCountdown > 0 ? 'tornado-storm-active border-fuchsia-400/60' : ''}`}
       >
+        {/* Banner Gangguan Puting Beliung (Tornado Debuff) */}
+        {tornadoCountdown > 0 && (
+          <div
+            role="alert"
+            className="mb-4 rounded-xl bg-fuchsia-500/15 border border-fuchsia-400/45 px-4 py-2.5 flex items-center justify-between gap-2 text-xs text-fuchsia-200"
+          >
+            <div className="flex items-center gap-2 font-bold min-w-0">
+              <Tornado className="w-4 h-4 text-fuchsia-300 shrink-0 animate-spin" />
+              <span className="truncate">
+                Badai Puting Beliung dari {tornadoAttackerName || 'lawan'}! Layar
+                terguncang &amp; opsi teracak!
+              </span>
+            </div>
+            <span className="font-mono-num font-extrabold text-fuchsia-300 shrink-0">
+              {tornadoCountdown}d
+            </span>
+          </div>
+        )}
+
         {/* Overlay Beku (Freeze Debuff) */}
         {isFrozen && (
           <div
@@ -714,9 +829,11 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
               className="arcade-btn mt-4 w-full bg-white hover:bg-slate-200 text-slate-950 font-extrabold text-sm sm:text-base py-3 rounded-xl inline-flex items-center justify-center gap-2 cursor-pointer"
             >
               <span>
-                {questionIndex + 1 < totalQuestions
-                  ? 'Lanjut Soal Berikutnya'
-                  : 'Lihat Hasil & Leaderboard'}
+                {willDockAfterThis && voyageProgress?.dockedIsland
+                  ? `Berlabuh di ${voyageProgress.dockedIsland.name}`
+                  : questionIndex + 1 < totalQuestions
+                    ? 'Lanjut Soal Berikutnya'
+                    : 'Lihat Hasil & Leaderboard'}
               </span>
               <ArrowRight className="w-4 h-4" />
             </button>

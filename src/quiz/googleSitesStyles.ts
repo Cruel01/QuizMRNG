@@ -113,7 +113,22 @@ export const GOOGLE_SITES_HEAD_ASSETS = `  <meta charset="UTF-8">
       80% { opacity: 1; transform: translateY(-20px) scale(1); }
       100% { opacity: 0; transform: translateY(-26px) scale(0.95); }
     }
+    @keyframes tornadoStorm {
+      0%, 100% { transform: translate(0, 0) rotate(0deg); }
+      15% { transform: translate(-5px, -2px) rotate(-1.1deg); }
+      30% { transform: translate(5px, 2px) rotate(1.1deg); }
+      45% { transform: translate(-6px, 1px) rotate(-0.9deg); }
+      60% { transform: translate(4px, -2px) rotate(0.9deg); }
+      75% { transform: translate(-4px, 2px) rotate(-0.6deg); }
+      90% { transform: translate(3px, -1px) rotate(0.5deg); }
+    }
+    @keyframes shipBob {
+      0%, 100% { transform: translateY(0px) rotate(-3deg); }
+      50% { transform: translateY(-3px) rotate(4deg); }
+    }
     .glitch-active { animation: glitchShake 0.35s ease-in-out 2; }
+    .tornado-storm-active { animation: tornadoStorm 0.45s ease-in-out infinite; }
+    .anim-ship-bob { transform-origin: center; animation: shipBob 2.2s ease-in-out infinite; }
     .anim-hourglass-flip { transform-origin: center; animation: hourglassFlip 2.8s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
     .anim-hourglass-fast { transform-origin: center; animation: hourglassFlip 1.4s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
     .anim-sand-drop { animation: sandDrop 1.4s ease-in infinite; }
@@ -125,7 +140,7 @@ export const GOOGLE_SITES_HEAD_ASSETS = `  <meta charset="UTF-8">
     .anim-confetti { animation: confettiFall 1.9s cubic-bezier(0.16, 1, 0.3, 1) infinite; }
     .anim-score-pop { animation: scorePop 1.1s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
     @media (prefers-reduced-motion: reduce) {
-      .glitch-active, .anim-hourglass-flip, .anim-hourglass-fast, .anim-sand-drop, .anim-radar-ping,
+      .glitch-active, .tornado-storm-active, .anim-ship-bob, .anim-hourglass-flip, .anim-hourglass-fast, .anim-sand-drop, .anim-radar-ping,
       .anim-flame-dance, .anim-float-gentle, .anim-urgent-tick, .anim-countdown-pop, .anim-confetti, .anim-score-pop {
         animation: none;
       }
