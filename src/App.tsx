@@ -1743,6 +1743,7 @@ export default function App() {
                 textAnswer={textAnswer}
                 glitchShake={glitchShake}
                 feedback={feedback}
+                suppressFeedbackPopup={Boolean(dockedIslandModal || liveLbModalOpen)}
                 isMuted={isMuted}
                 onToggleMute={handleToggleMute}
                 onSelectSingle={handleSelectSingle}

@@ -82,6 +82,7 @@ interface QuizScreenProps {
   textAnswer: string;
   glitchShake: boolean;
   feedback: QuestionFeedbackState | null;
+  suppressFeedbackPopup?: boolean;
   isMuted: boolean;
   onToggleMute: () => void;
   onSelectSingle: (origIdx: number) => void;
@@ -148,6 +149,7 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
   textAnswer,
   glitchShake,
   feedback,
+  suppressFeedbackPopup = false,
   isMuted,
   onToggleMute,
   onSelectSingle,
@@ -188,7 +190,7 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
           target.isContentEditable);
 
       if (feedback) {
-        if (e.key === 'Enter') {
+        if (!suppressFeedbackPopup && e.key === 'Enter') {
           e.preventDefault();
           onNextQuestion();
         }
@@ -246,6 +248,7 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
     optionOrder,
     question.type,
     selectedMultipleIndices.length,
+    suppressFeedbackPopup,
   ]);
 
   const activeTimerMax = isGlobalTimer
@@ -805,76 +808,97 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
             </button>
           </div>
         )}
+      </motion.div>
 
-        {/* Kotak Feedback & Pembahasan */}
-        {feedback && (
+      {/* Popup Feedback & Pembahasan di Tengah Layar */}
+      <AnimatePresence>
+        {feedback && !suppressFeedbackPopup && (
           <motion.div
-            initial={{ opacity: 0, y: 8, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ duration: 0.18 }}
-            role="status"
-            className={`mt-6 p-4 sm:p-5 rounded-xl border ${
-              feedback.isCorrect
-                ? 'bg-emerald-500/10 border-emerald-400/40'
-                : 'bg-rose-500/10 border-rose-400/40'
-            }`}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.16 }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="feedback-popup-title"
+            data-testid="feedback-popup"
+            className="fixed inset-0 z-40 bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-4"
           >
-            <div className="flex items-center justify-between gap-3 mb-2">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div
-                  className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
-                    feedback.isCorrect
-                      ? 'bg-emerald-400 text-slate-950'
-                      : 'bg-rose-500 text-white'
-                  }`}
-                >
-                  {feedback.isCorrect ? (
-                    <Check className="w-4 h-4 stroke-[3]" />
-                  ) : (
-                    <X className="w-4 h-4 stroke-[3]" />
-                  )}
-                </div>
-                <h3
-                  className={`font-extrabold text-sm sm:text-base ${
-                    feedback.isCorrect ? 'text-emerald-300' : 'text-rose-300'
-                  }`}
-                >
-                  {feedback.isCorrect
-                    ? 'Jawaban Benar!'
-                    : feedback.isTimeout
-                      ? `Waktu Habis! (Jawaban: ${feedback.correctAnswer})`
-                      : `Kurang Tepat (Jawaban: ${feedback.correctAnswer})`}
-                </h3>
-              </div>
-              <span className="font-mono-num font-bold text-xs sm:text-sm text-amber-300 shrink-0">
-                +{feedback.pointsEarned} poin
-              </span>
-            </div>
-
-            <p className="text-xs sm:text-sm text-slate-200 leading-relaxed">
-              {feedback.explanation}
-            </p>
-
-            <button
-              type="button"
-              onClick={() => {
-                playPopClickFx();
-                onNextQuestion();
-              }}
-              className="arcade-btn mt-4 w-full bg-white hover:bg-slate-200 text-slate-950 font-extrabold text-sm sm:text-base py-3 rounded-xl inline-flex items-center justify-center gap-2 cursor-pointer"
+            <motion.div
+              initial={{ opacity: 0, scale: 0.94, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 6 }}
+              transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+              className={`w-full max-w-lg max-h-[90vh] overflow-y-auto bg-[#131C31] rounded-2xl border shadow-2xl ${
+                feedback.isCorrect
+                  ? 'border-emerald-400/50'
+                  : 'border-rose-400/50'
+              }`}
             >
-              <span>
-                {willDockAfterThis && voyageProgress?.dockedIsland
-                  ? `Berlabuh di ${voyageProgress.dockedIsland.name}`
-                  : questionIndex + 1 < totalQuestions
-                    ? 'Lanjut Soal Berikutnya'
-                    : 'Lihat Hasil & Leaderboard'}
-              </span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
+              <div
+                className={`p-5 sm:p-6 ${
+                  feedback.isCorrect ? 'bg-emerald-500/10' : 'bg-rose-500/10'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-3 mb-2.5">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div
+                      className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
+                        feedback.isCorrect
+                          ? 'bg-emerald-400 text-slate-950'
+                          : 'bg-rose-500 text-white'
+                      }`}
+                    >
+                      {feedback.isCorrect ? (
+                        <Check className="w-4 h-4 stroke-[3]" />
+                      ) : (
+                        <X className="w-4 h-4 stroke-[3]" />
+                      )}
+                    </div>
+                    <h3
+                      id="feedback-popup-title"
+                      className={`font-extrabold text-sm sm:text-base ${
+                        feedback.isCorrect ? 'text-emerald-300' : 'text-rose-300'
+                      }`}
+                    >
+                      {feedback.isCorrect
+                        ? 'Jawaban Benar!'
+                        : feedback.isTimeout
+                          ? `Waktu Habis! (Jawaban: ${feedback.correctAnswer})`
+                          : `Kurang Tepat (Jawaban: ${feedback.correctAnswer})`}
+                    </h3>
+                  </div>
+                  <span className="font-mono-num font-bold text-xs sm:text-sm text-amber-300 shrink-0">
+                    +{feedback.pointsEarned} poin
+                  </span>
+                </div>
+
+                <p className="text-xs sm:text-sm text-slate-200 leading-relaxed">
+                  {feedback.explanation}
+                </p>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    playPopClickFx();
+                    onNextQuestion();
+                  }}
+                  className="arcade-btn mt-5 w-full bg-white hover:bg-slate-200 text-slate-950 font-extrabold text-sm sm:text-base py-3 rounded-xl inline-flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <span>
+                    {willDockAfterThis && voyageProgress?.dockedIsland
+                      ? `Berlabuh di ${voyageProgress.dockedIsland.name}`
+                      : questionIndex + 1 < totalQuestions
+                        ? 'Lanjut Soal Berikutnya'
+                        : 'Lihat Hasil & Leaderboard'}
+                  </span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+            </motion.div>
           </motion.div>
         )}
-      </motion.div>
+      </AnimatePresence>
     </section>
   );
 };

@@ -360,19 +360,24 @@ export const GOOGLE_SITES_BODY_MARKUP = `<body id="app-body" class="min-h-screen
             Kirim Jawaban
           </button>
         </div>
+      </div>
 
-        <div id="feedback-box" role="status" class="hidden mt-6 p-4 sm:p-5 rounded-xl border">
-          <div class="flex items-center justify-between gap-3 mb-2">
-            <div class="flex items-center gap-2.5 min-w-0">
-              <div id="feedback-icon" class="w-7 h-7 rounded-full flex items-center justify-center shrink-0"></div>
-              <h3 id="feedback-title" class="font-extrabold text-sm sm:text-base"></h3>
+      <!-- Popup Feedback & Pembahasan di Tengah Layar -->
+      <div id="feedback-box" role="dialog" aria-modal="true" aria-labelledby="feedback-title" class="hidden fixed inset-0 z-40 bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-4">
+        <div id="feedback-card" class="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-[#131C31] rounded-2xl border shadow-2xl">
+          <div id="feedback-inner" class="p-5 sm:p-6">
+            <div class="flex items-center justify-between gap-3 mb-2.5">
+              <div class="flex items-center gap-2.5 min-w-0">
+                <div id="feedback-icon" class="w-7 h-7 rounded-full flex items-center justify-center shrink-0"></div>
+                <h3 id="feedback-title" class="font-extrabold text-sm sm:text-base"></h3>
+              </div>
+              <span id="feedback-points" class="font-mono-num font-bold text-xs sm:text-sm text-amber-300 shrink-0"></span>
             </div>
-            <span id="feedback-points" class="font-mono-num font-bold text-xs sm:text-sm text-amber-300 shrink-0"></span>
+            <p id="feedback-explanation" class="text-xs sm:text-sm text-slate-200 leading-relaxed"></p>
+            <button id="btn-next-question" type="button" onclick="playPopClickFx(); nextQuestion()" class="arcade-btn mt-5 w-full bg-white hover:bg-slate-200 text-slate-950 font-extrabold text-sm sm:text-base py-3 rounded-xl inline-flex items-center justify-center gap-2 cursor-pointer">
+              Lanjut Soal Berikutnya
+            </button>
           </div>
-          <p id="feedback-explanation" class="text-xs sm:text-sm text-slate-200 leading-relaxed"></p>
-          <button id="btn-next-question" type="button" onclick="playPopClickFx(); nextQuestion()" class="arcade-btn mt-4 w-full bg-white hover:bg-slate-200 text-slate-950 font-extrabold text-sm sm:text-base py-3 rounded-xl inline-flex items-center justify-center gap-2 cursor-pointer">
-            Lanjut Soal Berikutnya
-          </button>
         </div>
       </div>
     </section>

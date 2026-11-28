@@ -1769,6 +1769,8 @@ export function buildGoogleSitesScripts(
       }
 
       var box = document.getElementById('feedback-box');
+      var card = document.getElementById('feedback-card');
+      var inner = document.getElementById('feedback-inner');
       var ico = document.getElementById('feedback-icon');
       var title = document.getElementById('feedback-title');
       var pts = document.getElementById('feedback-points');
@@ -1776,13 +1778,15 @@ export function buildGoogleSitesScripts(
       var nextBtn = document.getElementById('btn-next-question');
       box.classList.remove('hidden');
       if (isCorrect) {
-        box.className = 'mt-6 p-4 sm:p-5 rounded-xl border bg-emerald-500/10 border-emerald-400/40';
+        if (card) card.className = 'w-full max-w-lg max-h-[90vh] overflow-y-auto bg-[#131C31] rounded-2xl border shadow-2xl border-emerald-400/50';
+        if (inner) inner.className = 'p-5 sm:p-6 bg-emerald-500/10';
         ico.className = 'w-7 h-7 rounded-full flex items-center justify-center shrink-0 bg-emerald-400 text-slate-950 font-black';
         ico.textContent = '✓';
         title.className = 'font-extrabold text-sm sm:text-base text-emerald-300';
         title.textContent = 'Jawaban Benar!';
       } else {
-        box.className = 'mt-6 p-4 sm:p-5 rounded-xl border bg-rose-500/10 border-rose-400/40';
+        if (card) card.className = 'w-full max-w-lg max-h-[90vh] overflow-y-auto bg-[#131C31] rounded-2xl border shadow-2xl border-rose-400/50';
+        if (inner) inner.className = 'p-5 sm:p-6 bg-rose-500/10';
         ico.className = 'w-7 h-7 rounded-full flex items-center justify-center shrink-0 bg-rose-500 text-white font-black';
         ico.textContent = '✕';
         title.className = 'font-extrabold text-sm sm:text-base text-rose-300';
@@ -1809,6 +1813,7 @@ export function buildGoogleSitesScripts(
     function nextQuestion() {
       var vp = settings.gameplayMode === 'voyage' ? getVoyageProgressState(playerHistory.length, playDeck.length) : null;
       if (vp && vp.dockedIsland && visitedIslands.indexOf(vp.dockedIsland.islandNumber) === -1) {
+        document.getElementById('feedback-box').classList.add('hidden');
         playIslandDockFx();
         openIslandMinigameModal(vp.dockedIsland);
         return;
@@ -2042,7 +2047,7 @@ export function buildGoogleSitesScripts(
 
     // Keyboard shortcuts on Quiz screen
     window.addEventListener('keydown', function(e) {
-      if (activeScreen !== 'quiz' || isFrozen || preCountdownValue !== null) return;
+      if (activeScreen !== 'quiz' || isFrozen || preCountdownValue !== null || dockedIslandModal) return;
       var t = e.target;
       var isTyping = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
       if (questionFeedbackShown) {

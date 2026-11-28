@@ -687,3 +687,9 @@ test('mergeLiveAndFinishedLeaderboard preserves live correct count in Mode Bebas
   assert.equal(merged[1].currentQuestion, 3);
 });
 
+test('Google Sites HTML renders answer feedback as centered popup modal', () => {
+  const html = generateGoogleSitesHtml(DEFAULT_QUESTIONS, undefined, 'POP01');
+  assert.ok(html.includes('id="feedback-box" role="dialog" aria-modal="true"'));
+  assert.ok(html.includes('id="feedback-card"'));
+  assert.ok(html.includes('fixed inset-0 z-40 bg-slate-950/75 backdrop-blur-sm flex items-center justify-center'));
+});
