@@ -22,7 +22,7 @@ export const DEFAULT_QUIZ_SETTINGS: QuizSettings = {
   quizDurationMinutes: 0,
   gameplayMode: 'classic',
   participationMode: 'either',
-  showLiveLeaderboardToPlayers: false,
+  showLiveLeaderboardToPlayers: true,
   gamificationEnabled: true,
   enabledPowerups: [...ALL_POWERUP_IDS],
   streakEnabled: true,

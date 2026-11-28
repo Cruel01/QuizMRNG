@@ -87,6 +87,7 @@ export interface PlayerRecord {
 
 export type SessionMode =
   | 'unconfigured'
+  | 'free_waiting'
   | 'free'
   | 'live_waiting'
   | 'live_started';
@@ -110,6 +111,7 @@ export interface ActivePlayer {
   teamName?: string;
   mode: SessionMode;
   score?: number;
+  correct?: number;
   currentQuestion?: number;
   totalQuestions?: number;
   startedAt: number;

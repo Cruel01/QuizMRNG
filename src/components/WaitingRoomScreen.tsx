@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import {
+  Compass,
   DoorOpen,
   LogOut,
   Radio,
@@ -11,13 +12,14 @@ import {
   VolumeX,
 } from 'lucide-react';
 import { playPopClickFx } from '../quiz/soundFx';
-import type { GameplayMode, WaitingPlayer } from '../quiz/types';
+import type { GameplayMode, SessionMode, WaitingPlayer } from '../quiz/types';
 import { LiveRadarIcon, SpinningHourglassIcon } from './AnimatedIcons';
 
 interface WaitingRoomScreenProps {
   playerName: string;
   teamName?: string;
   roomCode?: string;
+  sessionMode?: SessionMode;
   gameplayMode?: GameplayMode;
   deviceId: string;
   waitingPlayers: WaitingPlayer[];
@@ -32,6 +34,7 @@ export const WaitingRoomScreen: React.FC<WaitingRoomScreenProps> = ({
   playerName,
   teamName,
   roomCode,
+  sessionMode = 'live_waiting',
   gameplayMode = 'classic',
   deviceId,
   waitingPlayers,
@@ -42,20 +45,36 @@ export const WaitingRoomScreen: React.FC<WaitingRoomScreenProps> = ({
   onLeave,
 }) => {
   const isVoyage = gameplayMode === 'voyage';
+  const isFreeWaiting = sessionMode === 'free_waiting' || sessionMode === 'free';
+  const isUnconfigured = sessionMode === 'unconfigured';
 
   return (
     <motion.section
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-      aria-label="Ruang Tunggu Live"
-      className="relative bg-[#131C31] border border-amber-400/35 rounded-2xl p-6 sm:p-9 shadow-xl text-center"
+      aria-label={isFreeWaiting ? 'Ruang Tunggu Mode Bebas' : 'Ruang Tunggu Live'}
+      className={`relative bg-[#131C31] rounded-2xl p-6 sm:p-9 shadow-xl text-center border ${
+        isFreeWaiting ? 'border-emerald-400/35' : 'border-amber-400/35'
+      }`}
     >
       {/* Top Context Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#23304C] pb-4 mb-6 text-left">
         <div className="flex flex-wrap items-center gap-2 text-xs text-slate-300 font-mono-num">
-          <span className="inline-flex items-center gap-1.5 font-bold text-amber-300">
-            <Radio className="w-3.5 h-3.5" /> Ruang Tunggu Live
+          <span
+            className={`inline-flex items-center gap-1.5 font-bold ${
+              isFreeWaiting ? 'text-emerald-300' : 'text-amber-300'
+            }`}
+          >
+            {isFreeWaiting ? (
+              <>
+                <Compass className="w-3.5 h-3.5" /> Ruang Tunggu · Mode Bebas
+              </>
+            ) : (
+              <>
+                <Radio className="w-3.5 h-3.5" /> Ruang Tunggu · Mode Live
+              </>
+            )}
           </span>
           <span className="text-slate-600" aria-hidden="true">
             ·
@@ -73,6 +92,8 @@ export const WaitingRoomScreen: React.FC<WaitingRoomScreenProps> = ({
                 <Ship className="w-3.5 h-3.5 text-sky-300" /> Berlayar Harta
                 Karun
               </>
+            ) : isFreeWaiting ? (
+              'Kuis Mandiri'
             ) : (
               'Kuis Klasik Serentak'
             )}
@@ -109,17 +130,43 @@ export const WaitingRoomScreen: React.FC<WaitingRoomScreenProps> = ({
       </div>
 
       {/* Radar & Heading */}
-      <div className="w-14 h-14 rounded-2xl bg-amber-400/15 border border-amber-400/30 text-amber-300 flex items-center justify-center mx-auto mb-4">
-        <LiveRadarIcon className="w-9 h-9" />
+      <div
+        className={`w-14 h-14 rounded-2xl border flex items-center justify-center mx-auto mb-4 ${
+          isFreeWaiting
+            ? 'bg-emerald-400/15 border-emerald-400/30 text-emerald-300'
+            : 'bg-amber-400/15 border-amber-400/30 text-amber-300'
+        }`}
+      >
+        {isFreeWaiting ? (
+          <Compass className="w-8 h-8" />
+        ) : (
+          <LiveRadarIcon className="w-9 h-9" />
+        )}
       </div>
 
       <h2 className="text-xl sm:text-3xl font-extrabold text-white mb-2">
-        Menunggu Admin Memulai Sesi Live
+        {isUnconfigured
+          ? 'Menunggu Admin Memilih Mode'
+          : isFreeWaiting
+            ? 'Mode Bebas Siap · Menunggu Start Admin'
+            : 'Menunggu Admin Memulai Sesi Live'}
       </h2>
       <p className="text-slate-400 text-xs sm:text-sm max-w-lg mx-auto mb-6 leading-relaxed">
-        Tetap buka halaman ini. Layar pertanyaan akan terbuka secara serentak
-        untuk seluruh peserta segera setelah Admin menekan tombol{' '}
-        <strong className="text-amber-300">Mulai Live Sekarang</strong>.
+        {isUnconfigured ? (
+          'Admin sedang meninjau ulang mode pelaksanaan. Tampilan ini akan otomatis menyesuaikan secara real-time.'
+        ) : isFreeWaiting ? (
+          <>
+            Admin memilih <strong className="text-emerald-300">Mode Bebas</strong>.
+            Kuis akan langsung terbuka otomatis segera setelah Admin menekan
+            tombol <strong className="text-emerald-300">Mulai Mode Bebas</strong>.
+          </>
+        ) : (
+          <>
+            Tetap buka halaman ini. Layar pertanyaan akan terbuka secara serentak
+            untuk seluruh peserta segera setelah Admin menekan tombol{' '}
+            <strong className="text-amber-300">Mulai Live Sekarang</strong>.
+          </>
+        )}
       </p>
 
       {/* Identitas Peserta Aktif */}
@@ -136,7 +183,7 @@ export const WaitingRoomScreen: React.FC<WaitingRoomScreenProps> = ({
           </div>
         </div>
         <span className="font-mono-num text-[11px] font-bold text-emerald-400">
-          Siap Mulai Serentak
+          {isFreeWaiting ? 'Standby Mode Bebas' : 'Siap Mulai Serentak'}
         </span>
       </div>
 

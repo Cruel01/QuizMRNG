@@ -194,10 +194,10 @@ export const GOOGLE_SITES_BODY_MARKUP = `<body id="app-body" class="min-h-screen
     </section>
 
     <!-- 2. WAITING ROOM -->
-    <section id="screen-waiting" aria-label="Ruang Tunggu Live" class="hidden relative surface-card border border-amber-400/35 rounded-2xl p-6 sm:p-9 shadow-xl text-center">
+    <section id="screen-waiting" aria-label="Ruang Tunggu" class="hidden relative surface-card border border-amber-400/35 rounded-2xl p-6 sm:p-9 shadow-xl text-center">
       <div class="flex flex-wrap items-center justify-between gap-3 border-b border-[#23304C] pb-4 mb-6 text-left">
         <div class="flex flex-wrap items-center gap-2 text-xs text-slate-300 font-mono-num">
-          <span class="font-bold text-amber-300">Ruang Tunggu Live</span>
+          <span id="waiting-mode-badge" class="font-bold text-amber-300">Ruang Tunggu · Mode Live</span>
           <span class="text-slate-600" aria-hidden="true">·</span>
           <span id="waiting-room-badge" class="text-sky-300 font-bold">Umum</span>
           <span class="text-slate-600 hidden sm:inline" aria-hidden="true">·</span>
@@ -212,15 +212,15 @@ export const GOOGLE_SITES_BODY_MARKUP = `<body id="app-body" class="min-h-screen
           </button>
         </div>
       </div>
-      <div class="w-14 h-14 rounded-2xl bg-amber-400/15 border border-amber-400/30 text-amber-300 flex items-center justify-center mx-auto mb-4">
+      <div id="waiting-icon-box" class="w-14 h-14 rounded-2xl bg-amber-400/15 border border-amber-400/30 text-amber-300 flex items-center justify-center mx-auto mb-4">
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" class="w-9 h-9">
           <circle cx="12" cy="12" r="7" stroke="currentColor" stroke-width="1.6" class="anim-radar-ping"/>
           <circle cx="12" cy="12" r="7.5" stroke="currentColor" stroke-opacity="0.3" stroke-width="1.5"/>
           <circle cx="12" cy="12" r="3.2" fill="currentColor"/>
         </svg>
       </div>
-      <h2 class="text-xl sm:text-3xl font-extrabold text-white mb-2">Menunggu Admin Memulai Sesi Live</h2>
-      <p class="text-slate-400 text-xs sm:text-sm max-w-lg mx-auto mb-6 leading-relaxed">
+      <h2 id="waiting-heading" class="text-xl sm:text-3xl font-extrabold text-white mb-2">Menunggu Admin Memulai Sesi Live</h2>
+      <p id="waiting-desc" class="text-slate-400 text-xs sm:text-sm max-w-lg mx-auto mb-6 leading-relaxed">
         Tetap buka halaman ini. Layar pertanyaan akan terbuka secara serentak untuk seluruh peserta segera setelah Admin menekan tombol <strong class="text-amber-300">Mulai Live Sekarang</strong>.
       </p>
       <div class="max-w-lg mx-auto mb-4 bg-[#0B1120] border border-[#23304C] rounded-xl px-4 py-3 flex flex-wrap items-center justify-between gap-2 text-left text-xs">
@@ -228,7 +228,7 @@ export const GOOGLE_SITES_BODY_MARKUP = `<body id="app-body" class="min-h-screen
           <div class="text-[11px] text-slate-400">Identitas Kamu</div>
           <div id="waiting-my-name" class="font-bold text-white truncate">Peserta</div>
         </div>
-        <span class="font-mono-num text-[11px] font-bold text-emerald-400">Siap Mulai Serentak</span>
+        <span id="waiting-status-tag" class="font-mono-num text-[11px] font-bold text-emerald-400">Siap Mulai Serentak</span>
       </div>
       <div class="bg-[#0B1120] border border-[#23304C] rounded-xl p-4 sm:p-5 max-w-lg mx-auto mb-6 text-left">
         <div class="flex items-center justify-between text-xs font-semibold text-slate-400 mb-3">
@@ -526,26 +526,26 @@ export const GOOGLE_SITES_BODY_MARKUP = `<body id="app-body" class="min-h-screen
             <span id="admin-mode-step-lock-tag" class="text-[11px] font-bold text-amber-300">Selesaikan Langkah 1 dulu</span>
           </div>
           <p class="text-xs text-slate-400 mb-4 leading-relaxed">
-            Secara bawaan peserta menunggu pilihan Admin. Jika salah satu mode sudah berjalan dengan peserta aktif/selesai, mode lainnya otomatis terkunci agar sesi tetap konsisten.
+            Pilih mode di bawah (bisa bebas gonta-ganti antara Mode Bebas &amp; Mode Live selama kuis belum dimulai). Tekan <strong class="text-emerald-300">Mulai Kuis Sekarang</strong> saat konfigurasi siap agar peserta bisa mulai mengerjakan.
           </p>
           <div id="admin-mode-locked-banner" class="mb-4 bg-amber-500/10 border border-amber-400/30 rounded-lg px-4 py-2.5 text-xs text-amber-200">
             Atur atau konfirmasi kode ruangan di <strong>Langkah 1</strong> terlebih dahulu untuk membuka kontrol Mode Pelaksanaan.
           </div>
           <div class="flex flex-wrap gap-2.5 mb-4">
-            <button id="btn-mode-free" type="button" onclick="adminSetSessionMode('free')" class="px-4 py-2.5 rounded-lg text-xs font-bold border bg-[#131C31] text-slate-200 border-[#23304C] cursor-pointer whitespace-nowrap">Mode Bebas</button>
-            <button id="btn-mode-live-wait" type="button" onclick="adminSetSessionMode('live_waiting')" class="px-4 py-2.5 rounded-lg text-xs font-bold border bg-[#131C31] text-slate-200 border-[#23304C] cursor-pointer whitespace-nowrap">Buka Lobby Live</button>
-            <button id="btn-mode-live-start" type="button" onclick="adminSetSessionMode('live_started')" class="px-4 py-2.5 rounded-lg text-xs font-extrabold bg-emerald-400 hover:bg-emerald-300 text-slate-950 cursor-pointer whitespace-nowrap">Mulai Live Sekarang</button>
+            <button id="btn-mode-free" type="button" onclick="adminSetSessionMode(currentSessionMode === 'free' ? 'free' : 'free_waiting')" class="px-4 py-2.5 rounded-lg text-xs font-bold border bg-[#131C31] text-slate-200 border-[#23304C] cursor-pointer whitespace-nowrap">Mode Bebas</button>
+            <button id="btn-mode-live-wait" type="button" onclick="adminSetSessionMode(currentSessionMode === 'live_started' ? 'live_started' : 'live_waiting')" class="px-4 py-2.5 rounded-lg text-xs font-bold border bg-[#131C31] text-slate-200 border-[#23304C] cursor-pointer whitespace-nowrap">Mode Live</button>
+            <button id="btn-mode-live-start" type="button" onclick="adminStartConfiguredMode()" class="px-4 py-2.5 rounded-lg text-xs font-extrabold bg-emerald-400 hover:bg-emerald-300 text-slate-950 cursor-pointer whitespace-nowrap">Mulai Kuis Sekarang</button>
             <button id="btn-mode-reset" type="button" onclick="adminResetSessionMode()" class="px-4 py-2.5 rounded-lg text-xs font-bold bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 cursor-pointer whitespace-nowrap">Reset Mode</button>
           </div>
           <div id="admin-session-status-banner" class="bg-[#131C31] border border-[#23304C] rounded-lg px-4 py-3 text-xs text-slate-300"></div>
         </div>
 
-        <!-- Ruang Tunggu Live & Monitor Live (2 Kolom Seimbang) -->
+        <!-- Ruang Tunggu & Monitor Live (2 Kolom Seimbang) -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div class="bg-[#0B1120] border border-[#23304C] rounded-xl p-5">
             <div class="flex items-center justify-between gap-2 mb-3">
-              <div id="admin-waiting-title" class="text-sm font-bold text-white">Peserta di Ruang Tunggu Live (0)</div>
-              <span class="text-[11px] font-mono-num text-slate-400">Lobby Live</span>
+              <div id="admin-waiting-title" class="text-sm font-bold text-white">Peserta Standby di Ruang Tunggu (0)</div>
+              <span id="admin-waiting-mode-badge" class="text-[11px] font-mono-num text-slate-400">Standby</span>
             </div>
             <div id="admin-waiting-list" class="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pr-1"></div>
           </div>

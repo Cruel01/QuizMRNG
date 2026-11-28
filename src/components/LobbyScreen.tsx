@@ -150,8 +150,12 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
       label: 'Menunggu Admin memilih mode kuis',
       colorClass: 'text-amber-300',
     },
+    free_waiting: {
+      label: 'Mode Bebas · Menunggu Start Admin',
+      colorClass: 'text-emerald-300',
+    },
     free: {
-      label: 'Mode Bebas · Kerjakan Mandiri',
+      label: 'Mode Bebas · Kuis Dibuka',
       colorClass: 'text-emerald-400',
     },
     live_waiting: {
@@ -264,6 +268,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
               className={`inline-flex items-center gap-2 text-xs font-semibold ${currentModeInfo.colorClass}`}
             >
               {(sessionMode === 'unconfigured' ||
+                sessionMode === 'free_waiting' ||
                 sessionMode === 'live_waiting') && (
                 <SpinningHourglassIcon className="w-4 h-4 shrink-0" />
               )}
@@ -663,33 +668,43 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                         isLiveMode ? 'text-amber-300' : 'text-emerald-300'
                       }`}
                     >
-                      {sessionMode === 'free'
-                        ? 'Mode Bebas · Kerjakan Mandiri'
-                        : sessionMode === 'live_waiting'
-                          ? 'Mode Live · Ruang Tunggu Serentak'
-                          : 'Mode Live · Arena Sedang Berlangsung'}
+                      {sessionMode === 'free_waiting'
+                        ? 'Mode Bebas · Siap (Menunggu Start Admin)'
+                        : sessionMode === 'free'
+                          ? 'Mode Bebas · Kerjakan Mandiri'
+                          : sessionMode === 'live_waiting'
+                            ? 'Mode Live · Ruang Tunggu Serentak'
+                            : 'Mode Live · Arena Sedang Berlangsung'}
                     </h2>
                     <span className="text-[11px] font-mono-num text-slate-300">
                       {isLiveMode
                         ? sessionMode === 'live_waiting'
                           ? `${waitingPlayers.length} di ruang tunggu`
                           : `${freshActiveCount} sedang bermain`
-                        : 'Langsung mulai'}
+                        : sessionMode === 'free_waiting'
+                          ? `${waitingPlayers.length} standby · Tunggu Start`
+                          : `${freshActiveCount} sedang bermain`}
                     </span>
                   </div>
                   <p className="text-xs text-slate-300 mt-1 leading-relaxed">
-                    {sessionMode === 'free'
-                      ? 'Kerjakan kapan saja sesuai kecepatanmu sendiri tanpa perlu menunggu peserta lain di ruang tunggu.'
-                      : sessionMode === 'live_waiting'
-                        ? 'Masukkan namamu untuk masuk ke Ruang Tunggu Live. Kuis akan dimulai serentak ketika Admin menekan Mulai Live.'
-                        : 'Sesi Live sudah dimulai! Masukkan namamu untuk langsung menyusul masuk bersama peserta lainnya.'}
+                    {sessionMode === 'free_waiting'
+                      ? 'Admin sedang menyiapkan konfigurasi Mode Bebas. Masukkan namamu untuk masuk daftar standby—kuis baru bisa dimulai setelah Admin menekan tombol Start.'
+                      : sessionMode === 'free'
+                        ? 'Akses Mode Bebas sudah dibuka Admin! Kerjakan kapan saja sesuai kecepatanmu sendiri sambil memantau klasemen real-time.'
+                        : sessionMode === 'live_waiting'
+                          ? 'Masukkan namamu untuk masuk ke Ruang Tunggu Live. Kuis akan dimulai serentak ketika Admin menekan Mulai Live.'
+                          : 'Sesi Live sudah dimulai! Masukkan namamu untuk langsung menyusul masuk bersama peserta lainnya.'}
                   </p>
 
                   {/* Info metadata ringkas khusus mode */}
                   <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400 mt-2 font-mono-num">
-                    {sessionMode === 'free' ? (
+                    {!isLiveMode ? (
                       <>
-                        <span>Tanpa ruang tunggu</span>
+                        <span>
+                          {sessionMode === 'free_waiting'
+                            ? 'Menunggu tombol Start Admin'
+                            : 'Leaderboard real-time aktif'}
+                        </span>
                         <span aria-hidden="true">·</span>
                         <span>
                           {settings.quizDurationMinutes > 0
@@ -862,6 +877,17 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
               >
                 <SpinningHourglassIcon className="w-4 h-4" /> Menunggu Admin...
               </button>
+            ) : sessionMode === 'free_waiting' ? (
+              <button
+                type="button"
+                onClick={() => {
+                  playPopClickFx();
+                  onStartClick();
+                }}
+                className="arcade-btn flex-1 bg-emerald-400/90 hover:bg-emerald-300 text-slate-950 font-extrabold text-sm sm:text-base py-3.5 px-6 rounded-xl cursor-pointer inline-flex items-center justify-center gap-2 whitespace-nowrap"
+              >
+                <Users className="w-4 h-4" /> Siap &amp; Tunggu Start Admin
+              </button>
             ) : sessionMode === 'free' ? (
               <button
                 type="button"
@@ -901,6 +927,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
             )}
 
             {(leaderboardCount > 0 ||
+              freshActiveCount > 0 ||
               hasPlayedThisDevice ||
               settings.showLiveLeaderboardToPlayers) && (
               <button

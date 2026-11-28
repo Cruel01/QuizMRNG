@@ -16,10 +16,13 @@ import {
   getStreakRewardTarget,
   getVoyageProgressState,
   grantPowerupToSlots,
+  isFreeSessionMode,
   isGamificationActive,
   isGlobalQuizTimerActive,
+  isLiveSessionMode,
   isMilestoneDropActive,
   isPowerupEnabled,
+  isSessionStarted,
   isStreakRewardActive,
   isTeamParticipationAvailable,
   mergeLiveAndFinishedLeaderboard,
@@ -502,6 +505,11 @@ test('generateGoogleSitesHtml embeds current questions, Voyage/Timer/Tornado par
   assert.ok(html.includes('submitLobbyRoomGate'));
   assert.ok(html.includes('lobby-mode-panel-title'));
   assert.ok(html.includes('waiting-room-badge'));
+  assert.ok(html.includes('waiting-mode-badge'));
+  assert.ok(html.includes('free_waiting'));
+  assert.ok(html.includes('Siap & Tunggu Start Admin'));
+  assert.ok(html.includes('adminStartConfiguredMode'));
+  assert.ok(html.includes('mergeLiveAndFinishedLeaderboard(cloudLeaderboard'));
   assert.ok(!html.includes('Publish &amp; Embed'));
   assert.ok(!html.includes('Publish & Embed'));
   assert.ok(!html.includes('window.alert('));
@@ -571,3 +579,111 @@ test('parseQuestionsImport handles comma CSV, Indonesian semicolon CSV, TSV past
   assert.equal(reimported.questions.length, DEFAULT_QUESTIONS.length);
   assert.equal(reimported.errors.length, 0);
 });
+
+test('pre-start session mode helpers & lock flags allow free switching before Start and lock after Start', () => {
+  assert.equal(isFreeSessionMode('free_waiting'), true);
+  assert.equal(isFreeSessionMode('free'), true);
+  assert.equal(isFreeSessionMode('live_waiting'), false);
+
+  assert.equal(isLiveSessionMode('live_waiting'), true);
+  assert.equal(isLiveSessionMode('live_started'), true);
+  assert.equal(isLiveSessionMode('free_waiting'), false);
+
+  assert.equal(isSessionStarted('unconfigured'), false);
+  assert.equal(isSessionStarted('free_waiting'), false);
+  assert.equal(isSessionStarted('live_waiting'), false);
+  assert.equal(isSessionStarted('free'), true);
+  assert.equal(isSessionStarted('live_started'), true);
+
+  assert.equal(isGlobalQuizTimerActive('free_waiting', { quizDurationMinutes: 20 }), true);
+
+  const standbyPlayers = [
+    { deviceId: 'w1', name: 'Budi', joinedAt: Date.now() },
+  ];
+
+  // With standby users in free_waiting or live_waiting (before Start), neither mode is locked out
+  const freePreFlags = getSessionLockFlags('free_waiting', standbyPlayers, [], []);
+  assert.equal(freePreFlags.isLiveLockedOut, false);
+  assert.equal(freePreFlags.isFreeLockedOut, false);
+  assert.equal(freePreFlags.waitingCount, 1);
+
+  const livePreFlags = getSessionLockFlags('live_waiting', standbyPlayers, [], []);
+  assert.equal(livePreFlags.isFreeLockedOut, false);
+  assert.equal(livePreFlags.isLiveLockedOut, false);
+
+  // Once live_started begins, Mode Bebas locks out
+  const liveStartedFlags = getSessionLockFlags('live_started', [], [], []);
+  assert.equal(liveStartedFlags.isFreeLockedOut, true);
+
+  // Once an active free player starts, Mode Live locks out
+  const freeStartedFlags = getSessionLockFlags(
+    'free',
+    [],
+    [
+      {
+        deviceId: 'a1',
+        name: 'Sari',
+        mode: 'free',
+        score: 900,
+        correct: 1,
+        currentQuestion: 1,
+        totalQuestions: 30,
+        startedAt: Date.now(),
+        lastSeen: Date.now(),
+      },
+    ],
+    []
+  );
+  assert.equal(freeStartedFlags.isLiveLockedOut, true);
+});
+
+test('mergeLiveAndFinishedLeaderboard preserves live correct count in Mode Bebas & prioritizes finished record', () => {
+  const now = Date.now();
+  const active: ActivePlayer[] = [
+    {
+      deviceId: 'dev-a',
+      name: 'Andi',
+      mode: 'free',
+      score: 1850,
+      correct: 2,
+      currentQuestion: 3,
+      totalQuestions: 30,
+      startedAt: now,
+      lastSeen: now,
+    },
+    {
+      deviceId: 'dev-b',
+      name: 'Bima',
+      mode: 'free',
+      score: 900,
+      correct: 1,
+      currentQuestion: 2,
+      totalQuestions: 30,
+      startedAt: now,
+      lastSeen: now,
+    },
+  ];
+  const finished: PlayerRecord[] = [
+    {
+      id: 'dev-b',
+      deviceId: 'dev-b',
+      name: 'Bima',
+      score: 2500,
+      correct: 3,
+      totalQuestions: 30,
+      history: [],
+      completedAt: new Date(now).toISOString(),
+    },
+  ];
+
+  const merged = mergeLiveAndFinishedLeaderboard(finished, active, 30, now);
+  assert.equal(merged.length, 2);
+  assert.equal(merged[0].deviceId, 'dev-b');
+  assert.equal(merged[0].status, 'finished');
+  assert.equal(merged[0].correct, 3);
+  assert.equal(merged[1].deviceId, 'dev-a');
+  assert.equal(merged[1].status, 'playing');
+  assert.equal(merged[1].correct, 2);
+  assert.equal(merged[1].currentQuestion, 3);
+});
+

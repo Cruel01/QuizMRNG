@@ -797,9 +797,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               )}
             </div>
             <p className="text-xs text-slate-400 mb-4 leading-relaxed">
-              Secara bawaan peserta menunggu pilihan Admin. Jika salah satu mode
-              sudah berjalan dengan peserta aktif/selesai, mode lainnya otomatis
-              terkunci agar sesi tetap konsisten.
+              Pilih mode di bawah (bisa bebas gonta-ganti antara Mode Bebas &amp; Mode
+              Live selama kuis belum dimulai). Tekan{' '}
+              <strong className="text-emerald-300">Mulai Kuis Sekarang</strong>{' '}
+              saat konfigurasi siap agar peserta bisa mulai mengerjakan.
             </p>
 
             {!roomConfirmed && (
@@ -818,13 +819,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 disabled={!roomConfirmed || lockFlags.isFreeLockedOut}
                 onClick={() => {
                   playPopClickFx();
-                  onSetSessionMode('free');
+                  onSetSessionMode(
+                    sessionMode === 'free' ? 'free' : 'free_waiting'
+                  );
                 }}
                 className={`px-4 py-2.5 rounded-lg text-xs font-bold border inline-flex items-center gap-1.5 transition whitespace-nowrap ${
                   !roomConfirmed || lockFlags.isFreeLockedOut
                     ? 'bg-slate-900 text-slate-600 border-slate-800 cursor-not-allowed'
-                    : sessionMode === 'free'
-                      ? 'bg-amber-400 text-slate-950 border-amber-300 cursor-pointer'
+                    : sessionMode === 'free_waiting' || sessionMode === 'free'
+                      ? 'bg-emerald-400 text-slate-950 border-emerald-300 cursor-pointer'
                       : 'bg-[#131C31] text-slate-200 border-[#23304C] hover:bg-slate-800 cursor-pointer'
                 }`}
               >
@@ -846,27 +849,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 disabled={!roomConfirmed || lockFlags.isLiveLockedOut}
                 onClick={() => {
                   playPopClickFx();
-                  onSetSessionMode('live_waiting');
+                  onSetSessionMode(
+                    sessionMode === 'live_started'
+                      ? 'live_started'
+                      : 'live_waiting'
+                  );
                 }}
                 className={`px-4 py-2.5 rounded-lg text-xs font-bold border inline-flex items-center gap-1.5 transition whitespace-nowrap ${
                   !roomConfirmed || lockFlags.isLiveLockedOut
                     ? 'bg-slate-900 text-slate-600 border-slate-800 cursor-not-allowed'
-                    : sessionMode === 'live_waiting'
+                    : sessionMode === 'live_waiting' ||
+                        sessionMode === 'live_started'
                       ? 'bg-amber-400 text-slate-950 border-amber-300 cursor-pointer'
                       : 'bg-[#131C31] text-slate-200 border-[#23304C] hover:bg-slate-800 cursor-pointer'
                 }`}
               >
                 {!roomConfirmed ? (
                   <>
-                    <Lock className="w-3.5 h-3.5" /> Buka Lobby Live
+                    <Lock className="w-3.5 h-3.5" /> Mode Live
                   </>
                 ) : lockFlags.isLiveLockedOut ? (
                   <>
-                    <Lock className="w-3.5 h-3.5" /> Live Terkunci
+                    <Lock className="w-3.5 h-3.5" /> Mode Live (Terkunci)
                   </>
                 ) : (
                   <>
-                    <Hourglass className="w-3.5 h-3.5" /> Buka Lobby Live
+                    <Hourglass className="w-3.5 h-3.5" /> Mode Live
                   </>
                 )}
               </button>
@@ -875,24 +883,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 type="button"
                 disabled={
                   !roomConfirmed ||
-                  lockFlags.isLiveLockedOut ||
-                  sessionMode === 'unconfigured' ||
-                  sessionMode === 'free'
+                  (sessionMode !== 'free_waiting' &&
+                    sessionMode !== 'live_waiting')
                 }
                 onClick={() => {
                   playPopClickFx();
-                  onSetSessionMode('live_started');
+                  if (sessionMode === 'free_waiting') {
+                    onSetSessionMode('free');
+                  } else if (sessionMode === 'live_waiting') {
+                    onSetSessionMode('live_started');
+                  }
                 }}
                 className={`px-4 py-2.5 rounded-lg text-xs font-extrabold inline-flex items-center gap-1.5 transition whitespace-nowrap ${
                   !roomConfirmed ||
-                  lockFlags.isLiveLockedOut ||
-                  sessionMode === 'unconfigured' ||
-                  sessionMode === 'free'
+                  (sessionMode !== 'free_waiting' &&
+                    sessionMode !== 'live_waiting')
                     ? 'bg-slate-900 text-slate-600 border border-slate-800 cursor-not-allowed'
                     : 'bg-emerald-400 hover:bg-emerald-300 text-slate-950 cursor-pointer'
                 }`}
               >
-                <Play className="w-3.5 h-3.5 fill-current" /> Mulai Live Sekarang
+                <Play className="w-3.5 h-3.5 fill-current" />
+                {sessionMode === 'free_waiting'
+                  ? 'Mulai Mode Bebas'
+                  : sessionMode === 'live_waiting'
+                    ? 'Mulai Live Sekarang'
+                    : sessionMode === 'free' || sessionMode === 'live_started'
+                      ? 'Kuis Sedang Berjalan'
+                      : 'Mulai Kuis Sekarang'}
               </button>
 
               <button
@@ -916,13 +933,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {sessionMode === 'unconfigured' && (
                 <span>
                   Status: <strong className="text-amber-300">Menunggu Admin</strong>{' '}
-                  — Beranda peserta terkunci sampai kamu memilih Mode Bebas atau
-                  Buka Lobby Live.
+                  — Pilih <strong>Mode Bebas</strong> atau <strong>Mode Live</strong>{' '}
+                  terlebih dahulu.
+                </span>
+              )}
+              {sessionMode === 'free_waiting' && (
+                <span>
+                  Status:{' '}
+                  <strong className="text-emerald-300">
+                    Mode Bebas Siap (Menunggu Start)
+                  </strong>{' '}
+                  — {waitingPlayers.length} peserta standby. Kamu masih bebas
+                  mengubah pengaturan atau ganti ke Mode Live sebelum menekan{' '}
+                  <strong>Mulai Mode Bebas</strong>.
                 </span>
               )}
               {sessionMode === 'free' && (
                 <span>
-                  Status: <strong className="text-emerald-400">Mode Bebas Aktif</strong>{' '}
+                  Status:{' '}
+                  <strong className="text-emerald-400">
+                    Mode Bebas Berlangsung
+                  </strong>{' '}
                   — {lockFlags.freshActiveCount} peserta sedang bermain,{' '}
                   {sortedLeaderboard.length} peserta selesai.
                 </span>
@@ -930,8 +961,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {sessionMode === 'live_waiting' && (
                 <span>
                   Status:{' '}
-                  <strong className="text-amber-300">Lobby Live Terbuka</strong> —{' '}
-                  {waitingPlayers.length} peserta di ruang tunggu siap dimulai.
+                  <strong className="text-amber-300">
+                    Mode Live Siap (Ruang Tunggu Dibuka)
+                  </strong>{' '}
+                  — {waitingPlayers.length} peserta standby. Kamu masih bisa
+                  beralih ke Mode Bebas sebelum menekan{' '}
+                  <strong>Mulai Live Sekarang</strong>.
                 </span>
               )}
               {sessionMode === 'live_started' && (
@@ -951,11 +986,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <div className="flex items-center gap-2">
                   <Users className="w-4 h-4 text-amber-400" />
                   <h3 className="text-sm font-bold text-white">
-                    Peserta di Ruang Tunggu Live ({waitingPlayers.length})
+                    Peserta Standby di Ruang Tunggu ({waitingPlayers.length})
                   </h3>
                 </div>
                 <span className="text-[11px] font-mono-num text-slate-400">
-                  Lobby Live
+                  {sessionMode === 'free_waiting' || sessionMode === 'free'
+                    ? 'Mode Bebas'
+                    : 'Mode Live'}
                 </span>
               </div>
               <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pr-1">
@@ -1548,8 +1585,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         {renderCatalogIcon(item.id)}
                       </div>
                       <div className="min-w-0">
-                        <div className="flex items-center gap-1.5 text-xs font-bold text-white">
-                          <span className="truncate">{item.name}</span>
+                        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs font-bold text-white">
+                          <span>{item.name}</span>
                           <span className="text-slate-500" aria-hidden="true">
                             ·
                           </span>

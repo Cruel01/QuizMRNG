@@ -427,16 +427,23 @@ export function buildGoogleSitesScripts(
         return now - ref <= STALE_ACTIVE_PLAYER_MS;
       });
     }
+    function isFreeSessionMode(m) {
+      return m === 'free_waiting' || m === 'free';
+    }
+    function isLiveSessionMode(m) {
+      return m === 'live_waiting' || m === 'live_started';
+    }
     function getSessionLockFlags() {
       var fresh = filterFreshActivePlayers(activePlayers);
       var hasFree = cloudLeaderboard.length > 0 || fresh.some(function(p) { return p.mode === 'free' || !p.mode; });
-      var hasLive = waitingPlayers.length > 0 || currentSessionMode === 'live_started' || fresh.some(function(p) { return p.mode === 'live_waiting' || p.mode === 'live_started'; });
+      var hasLive = currentSessionMode === 'live_started' || fresh.some(function(p) { return p.mode === 'live_started'; }) || (cloudLeaderboard.length > 0 && isLiveSessionMode(currentSessionMode));
       return {
         hasFreeEngagement: hasFree,
         hasLiveEngagement: hasLive,
-        isFreeLockedOut: (currentSessionMode === 'live_waiting' || currentSessionMode === 'live_started') && hasLive,
-        isLiveLockedOut: currentSessionMode === 'free' && hasFree,
-        freshActiveCount: fresh.length
+        isFreeLockedOut: isLiveSessionMode(currentSessionMode) && hasLive,
+        isLiveLockedOut: isFreeSessionMode(currentSessionMode) && hasFree,
+        freshActiveCount: fresh.length,
+        waitingCount: waitingPlayers.length
       };
     }
     function getConfiguredPowerups() {
@@ -604,7 +611,7 @@ export function buildGoogleSitesScripts(
       });
       filterFreshActivePlayers(activeList).forEach(function(ap) {
         if (!ap.deviceId || map[ap.deviceId]) return;
-        map[ap.deviceId] = { deviceId: ap.deviceId, name: ap.name, teamName: ap.teamName || '', score: ap.score || 0, correct: 0, currentQuestion: ap.currentQuestion || 1, totalQuestions: ap.totalQuestions || defaultTotal, status: 'playing' };
+        map[ap.deviceId] = { deviceId: ap.deviceId, name: ap.name, teamName: ap.teamName || '', score: ap.score || 0, correct: ap.correct || 0, currentQuestion: ap.currentQuestion || 1, totalQuestions: ap.totalQuestions || defaultTotal, status: 'playing' };
         keys.push(ap.deviceId);
       });
       return keys.map(function(k) { return map[k]; }).sort(function(a, b) { return b.score - a.score; });
@@ -815,9 +822,13 @@ export function buildGoogleSitesScripts(
         statusEl.className = 'inline-flex items-center gap-2 text-xs font-semibold text-amber-300' + (roomGateUnlocked ? '' : ' hidden');
         textEl.textContent = 'Menunggu Admin memilih mode kuis';
         hgEl.classList.remove('hidden');
+      } else if (currentSessionMode === 'free_waiting') {
+        statusEl.className = 'inline-flex items-center gap-2 text-xs font-semibold text-emerald-300' + (roomGateUnlocked ? '' : ' hidden');
+        textEl.textContent = 'Mode Bebas · Menunggu Start Admin';
+        hgEl.classList.remove('hidden');
       } else if (currentSessionMode === 'free') {
         statusEl.className = 'inline-flex items-center gap-2 text-xs font-semibold text-emerald-400' + (roomGateUnlocked ? '' : ' hidden');
-        textEl.textContent = 'Mode Bebas · Kerjakan Mandiri';
+        textEl.textContent = 'Mode Bebas · Kuis Dibuka';
         hgEl.classList.add('hidden');
       } else if (currentSessionMode === 'live_waiting') {
         statusEl.className = 'inline-flex items-center gap-2 text-xs font-semibold text-amber-300' + (roomGateUnlocked ? '' : ' hidden');
@@ -851,8 +862,9 @@ export function buildGoogleSitesScripts(
       var replayHint = document.getElementById('lobby-replay-hint');
       var btnStart = document.getElementById('btn-start-quiz');
       var btnLb = document.getElementById('btn-lobby-leaderboard');
+      var freshCnt = filterFreshActivePlayers(activePlayers).length;
 
-      if (btnLb) btnLb.classList.toggle('hidden', !(cloudLeaderboard.length > 0 || hasPlayedThisDevice || settings.showLiveLeaderboardToPlayers));
+      if (btnLb) btnLb.classList.toggle('hidden', !(cloudLeaderboard.length > 0 || freshCnt > 0 || hasPlayedThisDevice || settings.showLiveLeaderboardToPlayers));
 
       if (effectiveLocked) {
         awaitBanner.classList.add('hidden');
@@ -872,8 +884,7 @@ export function buildGoogleSitesScripts(
         btnStart.className = 'flex-1 bg-slate-800/80 text-slate-400 font-bold text-sm sm:text-base py-3.5 px-6 rounded-xl border border-slate-700 cursor-not-allowed inline-flex items-center justify-center gap-2 whitespace-nowrap';
         btnStart.textContent = 'Menunggu Admin...';
       } else {
-        var isLive = currentSessionMode === 'live_waiting' || currentSessionMode === 'live_started';
-        var freshCnt = filterFreshActivePlayers(activePlayers).length;
+        var isLive = isLiveSessionMode(currentSessionMode);
         awaitBanner.classList.add('hidden');
         inputBox.classList.remove('hidden');
         playedBanner.classList.add('hidden');
@@ -883,28 +894,32 @@ export function buildGoogleSitesScripts(
         }
         if (modeTitle) {
           modeTitle.className = 'text-sm sm:text-base font-extrabold ' + (isLive ? 'text-amber-300' : 'text-emerald-300');
-          modeTitle.textContent = currentSessionMode === 'free'
-            ? 'Mode Bebas · Kerjakan Mandiri'
-            : currentSessionMode === 'live_waiting'
-              ? 'Mode Live · Ruang Tunggu Serentak'
-              : 'Mode Live · Arena Sedang Berlangsung';
+          modeTitle.textContent = currentSessionMode === 'free_waiting'
+            ? 'Mode Bebas · Siap (Menunggu Start Admin)'
+            : currentSessionMode === 'free'
+              ? 'Mode Bebas · Kerjakan Mandiri'
+              : currentSessionMode === 'live_waiting'
+                ? 'Mode Live · Ruang Tunggu Serentak'
+                : 'Mode Live · Arena Sedang Berlangsung';
         }
         if (modeCount) {
           modeCount.textContent = isLive
             ? (currentSessionMode === 'live_waiting' ? (waitingPlayers.length + ' di ruang tunggu') : (freshCnt + ' sedang bermain'))
-            : 'Langsung mulai';
+            : (currentSessionMode === 'free_waiting' ? (waitingPlayers.length + ' standby · Tunggu Start') : (freshCnt + ' sedang bermain'));
         }
         if (modeDesc) {
-          modeDesc.textContent = currentSessionMode === 'free'
-            ? 'Kerjakan kapan saja sesuai kecepatanmu sendiri tanpa perlu menunggu peserta lain di ruang tunggu.'
-            : currentSessionMode === 'live_waiting'
-              ? 'Masukkan namamu untuk masuk ke Ruang Tunggu Live. Kuis akan dimulai serentak ketika Admin menekan Mulai Live.'
-              : 'Sesi Live sudah dimulai! Masukkan namamu untuk langsung menyusul masuk bersama peserta lainnya.';
+          modeDesc.textContent = currentSessionMode === 'free_waiting'
+            ? 'Admin sedang menyiapkan konfigurasi Mode Bebas. Masukkan namamu untuk masuk daftar standby—kuis baru bisa dimulai setelah Admin menekan tombol Start.'
+            : currentSessionMode === 'free'
+              ? 'Akses Mode Bebas sudah dibuka Admin! Kerjakan kapan saja sesuai kecepatanmu sendiri sambil memantau klasemen real-time.'
+              : currentSessionMode === 'live_waiting'
+                ? 'Masukkan namamu untuk masuk ke Ruang Tunggu Live. Kuis akan dimulai serentak ketika Admin menekan Mulai Live.'
+                : 'Sesi Live sudah dimulai! Masukkan namamu untuk langsung menyusul masuk bersama peserta lainnya.';
         }
         if (modeMeta) {
           var timerLbl = durMins > 0 ? ('Timer ' + durMins + ' Menit') : 'Timer per soal';
-          if (currentSessionMode === 'free') {
-            modeMeta.innerHTML = '<span>Tanpa ruang tunggu</span><span>·</span><span>' + timerLbl + '</span>' + (settings.allowReplay ? '<span>·</span><span class="text-emerald-300">Boleh ulang</span>' : '');
+          if (!isLive) {
+            modeMeta.innerHTML = '<span>' + (currentSessionMode === 'free_waiting' ? 'Menunggu tombol Start Admin' : 'Leaderboard real-time aktif') + '</span><span>·</span><span>' + timerLbl + '</span>' + (settings.allowReplay ? '<span>·</span><span class="text-emerald-300">Boleh ulang</span>' : '');
           } else {
             var standbyNames = waitingPlayers.slice(0, 3).map(function(w) { return escapeHtml(w.name); }).join(', ');
             var extraStandby = waitingPlayers.length > 3 ? (' +' + (waitingPlayers.length - 3)) : '';
@@ -914,7 +929,10 @@ export function buildGoogleSitesScripts(
         }
         if (replayHint) replayHint.classList.toggle('hidden', !(settings.allowReplay && hasPlayedThisDevice));
         btnStart.disabled = false;
-        if (currentSessionMode === 'free') {
+        if (currentSessionMode === 'free_waiting') {
+          btnStart.className = 'arcade-btn flex-1 bg-emerald-400/90 hover:bg-emerald-300 text-slate-950 font-extrabold text-sm sm:text-base py-3.5 px-6 rounded-xl cursor-pointer inline-flex items-center justify-center gap-2 whitespace-nowrap';
+          btnStart.textContent = 'Siap & Tunggu Start Admin';
+        } else if (currentSessionMode === 'free') {
           btnStart.className = 'arcade-btn flex-1 bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-extrabold text-sm sm:text-base py-3.5 px-6 rounded-xl cursor-pointer inline-flex items-center justify-center gap-2 whitespace-nowrap';
           btnStart.textContent = (hasPlayedThisDevice && settings.allowReplay)
             ? 'Main Lagi Sekarang'
@@ -925,8 +943,8 @@ export function buildGoogleSitesScripts(
         }
       }
 
-      if (activeScreen === 'waiting' && currentSessionMode === 'live_started' && !effectiveLocked && playerName) {
-        startGameplay(playerName, 'live_started', currentLiveRunId, false, false);
+      if (activeScreen === 'waiting' && (currentSessionMode === 'live_started' || currentSessionMode === 'free') && !effectiveLocked && playerName) {
+        startGameplay(playerName, currentSessionMode, currentLiveRunId, false, false);
       }
       if (activeScreen === 'waiting') {
         renderWaitingRoom();
@@ -1005,7 +1023,7 @@ export function buildGoogleSitesScripts(
       teamName = tVal;
 
       var resolvedTeam = getResolvedTeamName();
-      if (currentSessionMode === 'live_waiting') {
+      if (currentSessionMode === 'live_waiting' || currentSessionMode === 'free_waiting') {
         showScreen('waiting');
         renderWaitingRoom();
         if (window.joinWaitingRoomCloud) window.joinWaitingRoomCloud({ deviceId: myDeviceId, name: name, teamName: resolvedTeam || undefined, joinedAt: Date.now() });
@@ -1020,11 +1038,48 @@ export function buildGoogleSitesScripts(
       var roomBadge = document.getElementById('waiting-room-badge');
       var gmLbl = document.getElementById('waiting-gameplay-label');
       var myNameEl = document.getElementById('waiting-my-name');
+      var waitSec = document.getElementById('screen-waiting');
+      var modeBadge = document.getElementById('waiting-mode-badge');
+      var iconBox = document.getElementById('waiting-icon-box');
+      var headingEl = document.getElementById('waiting-heading');
+      var descEl = document.getElementById('waiting-desc');
+      var statusTagEl = document.getElementById('waiting-status-tag');
       var isVoy = isTeamParticipationAvailable();
       var resolvedTeam = getResolvedTeamName();
+      var isFreeWait = currentSessionMode === 'free_waiting' || currentSessionMode === 'free';
+      var isUnconf = currentSessionMode === 'unconfigured';
+
+      if (waitSec) {
+        waitSec.className = (activeScreen === 'waiting' ? '' : 'hidden ') + 'relative surface-card rounded-2xl p-6 sm:p-9 shadow-xl text-center border ' + (isFreeWait ? 'border-emerald-400/35' : 'border-amber-400/35');
+      }
+      if (modeBadge) {
+        modeBadge.textContent = isFreeWait ? 'Ruang Tunggu · Mode Bebas' : 'Ruang Tunggu · Mode Live';
+        modeBadge.className = 'font-bold ' + (isFreeWait ? 'text-emerald-300' : 'text-amber-300');
+      }
+      if (iconBox) {
+        iconBox.className = 'w-14 h-14 rounded-2xl border flex items-center justify-center mx-auto mb-4 ' +
+          (isFreeWait ? 'bg-emerald-400/15 border-emerald-400/30 text-emerald-300' : 'bg-amber-400/15 border-amber-400/30 text-amber-300');
+      }
+      if (headingEl) {
+        headingEl.textContent = isUnconf
+          ? 'Menunggu Admin Memilih Mode'
+          : isFreeWait
+            ? 'Mode Bebas Siap · Menunggu Start Admin'
+            : 'Menunggu Admin Memulai Sesi Live';
+      }
+      if (descEl) {
+        descEl.innerHTML = isUnconf
+          ? 'Admin sedang meninjau ulang mode pelaksanaan. Tampilan ini akan otomatis menyesuaikan secara real-time.'
+          : isFreeWait
+            ? 'Admin memilih <strong class="text-emerald-300">Mode Bebas</strong>. Kuis akan langsung terbuka otomatis segera setelah Admin menekan tombol <strong class="text-emerald-300">Mulai Mode Bebas</strong>.'
+            : 'Tetap buka halaman ini. Layar pertanyaan akan terbuka secara serentak untuk seluruh peserta segera setelah Admin menekan tombol <strong class="text-amber-300">Mulai Live Sekarang</strong>.';
+      }
+      if (statusTagEl) {
+        statusTagEl.textContent = isFreeWait ? 'Standby Mode Bebas' : 'Siap Mulai Serentak';
+      }
 
       if (roomBadge) roomBadge.textContent = activeRoomCode ? ('#' + activeRoomCode) : 'Umum';
-      if (gmLbl) gmLbl.textContent = isVoy ? 'Berlayar Harta Karun' : 'Kuis Klasik Serentak';
+      if (gmLbl) gmLbl.textContent = isVoy ? 'Berlayar Harta Karun' : (isFreeWait ? 'Kuis Mandiri' : 'Kuis Klasik Serentak');
       if (myNameEl) {
         myNameEl.textContent = (playerName || 'Peserta') + (isVoy ? (resolvedTeam ? (' · Tim ' + resolvedTeam) : ' · Solo') : '');
       }
@@ -1143,7 +1198,7 @@ export function buildGoogleSitesScripts(
         if (window.upsertActivePlayerCloud) {
           window.upsertActivePlayerCloud({
             deviceId: myDeviceId, name: name, teamName: resolvedTeam || undefined,
-            mode: modeUsed, score: 0, currentQuestion: 1, totalQuestions: playDeck.length,
+            mode: modeUsed, score: 0, correct: 0, currentQuestion: 1, totalQuestions: playDeck.length,
             startedAt: Date.now(), lastSeen: Date.now()
           });
         }
@@ -1699,7 +1754,7 @@ export function buildGoogleSitesScripts(
       if (!isAutostartDemo) {
         if (window.upsertActivePlayerCloud) {
           window.upsertActivePlayerCloud({
-            deviceId: myDeviceId, name: playerName, teamName: resolvedTeam || undefined, mode: currentSessionMode, score: score,
+            deviceId: myDeviceId, name: playerName, teamName: resolvedTeam || undefined, mode: currentSessionMode, score: score, correct: correctCount,
             currentQuestion: currentQuestionIndex + 1, totalQuestions: playDeck.length, startedAt: Date.now(), lastSeen: Date.now()
           });
         }
@@ -2217,10 +2272,10 @@ export function buildGoogleSitesScripts(
     }
 
     function renderLeaderboardScreen() {
-      var sorted = cloudLeaderboard.slice().sort(function(a, b) { return (b.score || 0) - (a.score || 0); });
+      var sorted = mergeLiveAndFinishedLeaderboard(cloudLeaderboard, activePlayers, playDeck.length || questions.length);
       var replayBtn = document.getElementById('btn-replay-quiz');
       if (replayBtn) {
-        var canReplay = settings.allowReplay && currentSessionMode !== 'unconfigured' && currentSessionMode !== 'live_waiting';
+        var canReplay = settings.allowReplay && (currentSessionMode === 'free' || currentSessionMode === 'live_started');
         replayBtn.classList.toggle('hidden', !canReplay);
       }
 
@@ -2270,7 +2325,7 @@ export function buildGoogleSitesScripts(
       } else {
         if (headEl) headEl.innerHTML = '<div class="col-span-2 text-center">Rank</div><div class="col-span-5">Nama Pemain</div><div class="col-span-2 text-center">Benar</div><div class="col-span-3 text-right">Skor</div>';
         if (sorted.length === 0) {
-          listEl.innerHTML = '<div class="p-8 text-center text-sm text-slate-400">Belum ada peserta yang menyelesaikan kuis.</div>';
+          listEl.innerHTML = '<div class="p-8 text-center text-sm text-slate-400">Belum ada peserta yang bermain atau menyelesaikan kuis.</div>';
         } else {
           listEl.innerHTML = sorted.map(function(p, i) {
             var rank = i + 1;
@@ -2279,10 +2334,16 @@ export function buildGoogleSitesScripts(
               rank === 2 ? '<span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-slate-300 text-slate-950 font-black">#2</span>' :
               rank === 3 ? '<span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-700 text-white font-black">#3</span>' :
               '<span class="text-slate-300 font-bold">#' + rank + '</span>';
+            var statusLbl = p.status === 'finished'
+              ? '<span class="text-emerald-400">Selesai</span>'
+              : '<span class="text-sky-300">Bermain · Soal ' + p.currentQuestion + '/' + p.totalQuestions + '</span>';
             return '<div class="grid grid-cols-12 items-center px-4 py-3 text-sm ' + (isMe ? 'bg-amber-400/10 font-bold' : '') + '">' +
               '<div class="col-span-2 flex justify-center font-mono-num">' + badge + '</div>' +
               '<div class="col-span-5 truncate pr-2 text-white"><div class="truncate">' + escapeHtml(p.name) + (isMe ? ' <span class="text-xs text-amber-300 font-semibold">(Kamu)</span>' : '') + '</div>' +
-                (p.teamName ? ('<div class="text-[11px] text-sky-300 font-semibold truncate">Tim ' + escapeHtml(p.teamName) + '</div>') : '') + '</div>' +
+                '<div class="flex flex-wrap items-center gap-1.5 text-[11px] font-semibold truncate">' +
+                  (p.teamName ? ('<span class="text-sky-300">Tim ' + escapeHtml(p.teamName) + ' ·</span>') : '') +
+                  '<span class="font-mono-num">' + statusLbl + '</span>' +
+                '</div></div>' +
               '<div class="col-span-2 text-center font-mono-num text-emerald-400 font-semibold">' + (p.correct || 0) + '/' + (p.totalQuestions || questions.length) + '</div>' +
               '<div class="col-span-3 text-right font-mono-num font-extrabold text-amber-400">' + (p.score || 0) + '</div>' +
             '</div>';
@@ -2395,17 +2456,24 @@ export function buildGoogleSitesScripts(
       btnFree.textContent = !adminRoomConfirmed ? 'Mode Bebas (Terkunci)' : (flags.isFreeLockedOut ? 'Mode Bebas (Terkunci)' : 'Mode Bebas');
       btnFree.className = 'px-4 py-2.5 rounded-lg text-xs font-bold border whitespace-nowrap ' +
         (freeDis ? 'bg-slate-900 text-slate-600 border-slate-800 cursor-not-allowed' :
-        currentSessionMode === 'free' ? 'bg-amber-400 text-slate-950 border-amber-300 cursor-pointer' : 'bg-[#131C31] text-slate-200 border-[#23304C] cursor-pointer');
+        isFreeSessionMode(currentSessionMode) ? 'bg-emerald-400 text-slate-950 border-emerald-300 cursor-pointer' : 'bg-[#131C31] text-slate-200 border-[#23304C] cursor-pointer');
 
       var waitDis = !adminRoomConfirmed || flags.isLiveLockedOut;
       btnWait.disabled = waitDis;
-      btnWait.textContent = !adminRoomConfirmed ? 'Buka Lobby Live (Terkunci)' : (flags.isLiveLockedOut ? 'Live Terkunci' : 'Buka Lobby Live');
+      btnWait.textContent = !adminRoomConfirmed ? 'Mode Live (Terkunci)' : (flags.isLiveLockedOut ? 'Mode Live (Terkunci)' : 'Mode Live');
       btnWait.className = 'px-4 py-2.5 rounded-lg text-xs font-bold border whitespace-nowrap ' +
         (waitDis ? 'bg-slate-900 text-slate-600 border-slate-800 cursor-not-allowed' :
-        currentSessionMode === 'live_waiting' ? 'bg-amber-400 text-slate-950 border-amber-300 cursor-pointer' : 'bg-[#131C31] text-slate-200 border-[#23304C] cursor-pointer');
+        isLiveSessionMode(currentSessionMode) ? 'bg-amber-400 text-slate-950 border-amber-300 cursor-pointer' : 'bg-[#131C31] text-slate-200 border-[#23304C] cursor-pointer');
 
-      var startDis = !adminRoomConfirmed || flags.isLiveLockedOut || currentSessionMode === 'unconfigured' || currentSessionMode === 'free';
+      var startDis = !adminRoomConfirmed || (currentSessionMode !== 'free_waiting' && currentSessionMode !== 'live_waiting');
       btnStart.disabled = startDis;
+      btnStart.textContent = currentSessionMode === 'free_waiting'
+        ? 'Mulai Mode Bebas'
+        : currentSessionMode === 'live_waiting'
+          ? 'Mulai Live Sekarang'
+          : (currentSessionMode === 'free' || currentSessionMode === 'live_started')
+            ? 'Kuis Sedang Berjalan'
+            : 'Mulai Kuis Sekarang';
       btnStart.className = 'px-4 py-2.5 rounded-lg text-xs font-extrabold whitespace-nowrap ' +
         (startDis ? 'bg-slate-900 text-slate-600 border border-slate-800 cursor-not-allowed' : 'bg-emerald-400 hover:bg-emerald-300 text-slate-950 cursor-pointer');
 
@@ -2416,9 +2484,10 @@ export function buildGoogleSitesScripts(
       }
 
       var banner = document.getElementById('admin-session-status-banner');
-      if (currentSessionMode === 'unconfigured') banner.innerHTML = 'Status: <strong class="text-amber-300">Menunggu Admin</strong> — Beranda peserta terkunci sampai kamu memilih Mode Bebas atau Buka Lobby Live.';
-      else if (currentSessionMode === 'free') banner.innerHTML = 'Status: <strong class="text-emerald-400">Mode Bebas Aktif</strong> — ' + flags.freshActiveCount + ' peserta sedang bermain, ' + cloudLeaderboard.length + ' peserta selesai.';
-      else if (currentSessionMode === 'live_waiting') banner.innerHTML = 'Status: <strong class="text-amber-300">Lobby Live Terbuka</strong> — ' + waitingPlayers.length + ' peserta di ruang tunggu siap dimulai.';
+      if (currentSessionMode === 'unconfigured') banner.innerHTML = 'Status: <strong class="text-amber-300">Menunggu Admin</strong> — Pilih <strong>Mode Bebas</strong> atau <strong>Mode Live</strong> terlebih dahulu.';
+      else if (currentSessionMode === 'free_waiting') banner.innerHTML = 'Status: <strong class="text-emerald-300">Mode Bebas Siap (Menunggu Start)</strong> — ' + waitingPlayers.length + ' peserta standby. Kamu masih bebas mengubah pengaturan atau ganti ke Mode Live sebelum menekan <strong>Mulai Mode Bebas</strong>.';
+      else if (currentSessionMode === 'free') banner.innerHTML = 'Status: <strong class="text-emerald-400">Mode Bebas Berlangsung</strong> — ' + flags.freshActiveCount + ' peserta sedang bermain, ' + cloudLeaderboard.length + ' peserta selesai.';
+      else if (currentSessionMode === 'live_waiting') banner.innerHTML = 'Status: <strong class="text-amber-300">Mode Live Siap (Ruang Tunggu Dibuka)</strong> — ' + waitingPlayers.length + ' peserta standby. Kamu masih bisa beralih ke Mode Bebas sebelum menekan <strong>Mulai Live Sekarang</strong>.';
       else banner.innerHTML = 'Status: <strong class="text-rose-400">Live Berlangsung</strong> — ' + flags.freshActiveCount + ' peserta aktif bermain.';
 
       // Live Monitor
@@ -2441,11 +2510,15 @@ export function buildGoogleSitesScripts(
 
       // Waiting list summary in Kontrol Sesi
       var wTitle = document.getElementById('admin-waiting-title');
-      if (wTitle) wTitle.textContent = 'Peserta di Ruang Tunggu Live (' + waitingPlayers.length + ')';
+      if (wTitle) wTitle.textContent = 'Peserta Standby di Ruang Tunggu (' + waitingPlayers.length + ')';
+      var wModeBadge = document.getElementById('admin-waiting-mode-badge');
+      if (wModeBadge) {
+        wModeBadge.textContent = isFreeSessionMode(currentSessionMode) ? 'Standby Mode Bebas' : isLiveSessionMode(currentSessionMode) ? 'Standby Live' : 'Standby';
+      }
       var wBox = document.getElementById('admin-waiting-list');
       if (wBox) {
         wBox.innerHTML = waitingPlayers.length === 0
-          ? '<span class="text-xs text-slate-500">Belum ada peserta menunggu di lobby live.</span>'
+          ? '<span class="text-xs text-slate-500">Belum ada peserta standby di ruang tunggu.</span>'
           : waitingPlayers.map(function(p) { return '<span class="px-2.5 py-1 rounded-md bg-[#131C31] border border-[#23304C] text-xs text-slate-200 font-semibold">' + escapeHtml(p.name) + (p.teamName ? (' · ' + escapeHtml(p.teamName)) : '') + '</span>'; }).join('');
       }
 
@@ -2601,7 +2674,7 @@ export function buildGoogleSitesScripts(
             '<div class="flex items-start gap-3 min-w-0">' +
               '<div class="w-8 h-8 rounded-lg bg-[#0B1120] border border-[#23304C] flex items-center justify-center shrink-0">' + getPowerupSvgHtml(key) + '</div>' +
               '<div class="min-w-0">' +
-                '<div class="flex items-center gap-1.5 text-xs font-bold text-white"><span class="truncate">' + escapeHtml(item.name) + '</span><span class="text-slate-500">·</span><span class="' + (isBuff ? 'text-emerald-400' : 'text-sky-400') + '">' + (isBuff ? 'Buff' : 'Debuff') + '</span></div>' +
+                '<div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs font-bold text-white"><span>' + escapeHtml(item.name) + '</span><span class="text-slate-500">·</span><span class="' + (isBuff ? 'text-emerald-400' : 'text-sky-400') + '">' + (isBuff ? 'Buff' : 'Debuff') + '</span></div>' +
                 '<p class="text-[11px] text-slate-400 mt-1 leading-snug">' + escapeHtml(item.desc) + '</p>' +
               '</div>' +
             '</div>' +
@@ -2850,14 +2923,24 @@ export function buildGoogleSitesScripts(
       playPopClickFx();
       if (!adminRoomConfirmed) { showToast('Konfirmasi Kode Ruangan di Langkah 1 terlebih dahulu.'); return; }
       var flags = getSessionLockFlags();
-      if (newMode === 'free' && flags.isFreeLockedOut) { showToast('Mode Bebas terkunci karena sesi Live sudah memiliki peserta!'); return; }
-      if ((newMode === 'live_waiting' || newMode === 'live_started') && flags.isLiveLockedOut) { showToast('Fitur Live terkunci karena sudah ada peserta di Mode Bebas!'); return; }
+      if (isFreeSessionMode(newMode) && flags.isFreeLockedOut) { showToast('Mode Bebas terkunci karena sesi Live sudah berjalan!'); return; }
+      if (isLiveSessionMode(newMode) && flags.isLiveLockedOut) { showToast('Mode Live terkunci karena sudah ada peserta mengerjakan di Mode Bebas!'); return; }
       if (newMode === 'live_started') currentLiveRunId = 'LIVE-' + Date.now();
+      else if (newMode === 'free') currentLiveRunId = 'FREE-' + Date.now();
       currentSessionMode = newMode;
       if (window.saveSessionStateToCloud) window.saveSessionStateToCloud({ mode: newMode, runId: currentLiveRunId, updatedAt: Date.now() });
       updateLobbyUI();
-      var msgs = { free: 'Mode Bebas aktif!', live_waiting: 'Ruang Tunggu Live dibuka!', live_started: 'Kuis Live DIMULAI serentak!' };
+      var msgs = {
+        free_waiting: 'Mode Bebas dipilih! Atur konfigurasi lalu klik Mulai Mode Bebas agar peserta dapat bermain.',
+        free: 'Mode Bebas DIMULAI! Seluruh peserta kini dapat mengerjakan kuis.',
+        live_waiting: 'Mode Live dipilih! Ruang tunggu dibuka — klik Mulai Live Sekarang untuk memulai serentak.',
+        live_started: 'Kuis Live DIMULAI serentak!'
+      };
       showToast(msgs[newMode] || 'Mode diperbarui.');
+    }
+    function adminStartConfiguredMode() {
+      if (currentSessionMode === 'free_waiting') adminSetSessionMode('free');
+      else if (currentSessionMode === 'live_waiting') adminSetSessionMode('live_started');
     }
     function adminResetSessionMode() {
       playPopClickFx();
@@ -3545,7 +3628,9 @@ export function buildGoogleSitesScripts(
     };
     window.onCloudActive = function(list) {
       activePlayers = list || [];
+      updateLobbyUI();
       renderLiveLeaderboardModal();
+      if (activeScreen === 'leaderboard') renderLeaderboardScreen();
       if (activeScreen === 'admin') renderAdminSessionControls();
     };
     window.onCloudSabotage = function(ev) {
@@ -3617,7 +3702,9 @@ export function buildGoogleSitesScripts(
         if (snap.exists() && snap.data().items && window.onCloudQuestions) window.onCloudQuestions(snap.data().items);
       }));
       activeUnsubs.push(onSnapshot(doc(db, base[0], base[1], base[2], base[3], 'config', 'session'), function(snap) {
-        if (snap.exists() && window.onCloudSession) window.onCloudSession(snap.data());
+        if (!window.onCloudSession) return;
+        if (snap.exists()) window.onCloudSession(snap.data());
+        else window.onCloudSession({ mode: 'unconfigured', runId: 'default', updatedAt: 0 });
       }));
       activeUnsubs.push(onSnapshot(doc(db, base[0], base[1], base[2], base[3], 'config', 'settings'), function(snap) {
         if (snap.exists() && window.onCloudSettings) window.onCloudSettings(snap.data());
@@ -3656,12 +3743,24 @@ export function buildGoogleSitesScripts(
       }
     })();
 
+    function stripUndefined(val) {
+      if (Array.isArray(val)) return val.map(stripUndefined);
+      if (val && typeof val === 'object') {
+        var out = {};
+        Object.keys(val).forEach(function(k) {
+          if (val[k] !== undefined) out[k] = stripUndefined(val[k]);
+        });
+        return out;
+      }
+      return val;
+    }
+
     window.switchFirebaseRoom = function(newCode) { subscribeRoom(newCode); };
-    window.saveSessionStateToCloud = async function(payload) { if (!db) return; try { await setDoc(doc(db, 'artifacts', currentRoomAppId, 'public', 'data', 'config', 'session'), payload); } catch (e) {} };
-    window.saveQuizSettingsToCloud = async function(cfg) { if (!db) return; try { await setDoc(doc(db, 'artifacts', currentRoomAppId, 'public', 'data', 'config', 'settings'), Object.assign({}, cfg, { updatedAt: Date.now() })); } catch (e) {} };
-    window.joinWaitingRoomCloud = async function(p) { if (!db) return; try { await setDoc(doc(db, 'artifacts', currentRoomAppId, 'public', 'data', 'waiting_room', p.deviceId), p); } catch (e) {} };
+    window.saveSessionStateToCloud = async function(payload) { if (!db) return; try { await setDoc(doc(db, 'artifacts', currentRoomAppId, 'public', 'data', 'config', 'session'), stripUndefined(payload)); } catch (e) {} };
+    window.saveQuizSettingsToCloud = async function(cfg) { if (!db) return; try { await setDoc(doc(db, 'artifacts', currentRoomAppId, 'public', 'data', 'config', 'settings'), stripUndefined(Object.assign({}, cfg, { updatedAt: Date.now() }))); } catch (e) {} };
+    window.joinWaitingRoomCloud = async function(p) { if (!db) return; try { await setDoc(doc(db, 'artifacts', currentRoomAppId, 'public', 'data', 'waiting_room', p.deviceId), stripUndefined(p)); } catch (e) {} };
     window.leaveWaitingRoomCloud = async function(id) { if (!db || !id) return; try { await deleteDoc(doc(db, 'artifacts', currentRoomAppId, 'public', 'data', 'waiting_room', id)); } catch (e) {} };
-    window.upsertActivePlayerCloud = async function(p) { if (!db || !p.deviceId) return; try { await setDoc(doc(db, 'artifacts', currentRoomAppId, 'public', 'data', 'active_players', p.deviceId), p); } catch (e) {} };
+    window.upsertActivePlayerCloud = async function(p) { if (!db || !p.deviceId) return; try { await setDoc(doc(db, 'artifacts', currentRoomAppId, 'public', 'data', 'active_players', p.deviceId), stripUndefined(p)); } catch (e) {} };
     window.unregisterActivePlayerCloud = async function(id) { if (!db || !id) return; try { await deleteDoc(doc(db, 'artifacts', currentRoomAppId, 'public', 'data', 'active_players', id)); } catch (e) {} };
     window.clearActiveSessionPlayersCloud = async function() {
       if (!db) return;
@@ -3674,7 +3773,7 @@ export function buildGoogleSitesScripts(
         await Promise.all(dels);
       } catch (e) {}
     };
-    window.saveScoreToCloud = async function(rec) { if (!db) return false; try { await setDoc(doc(db, 'artifacts', currentRoomAppId, 'public', 'data', 'leaderboard', rec.deviceId), rec); return true; } catch (e) { return false; } };
+    window.saveScoreToCloud = async function(rec) { if (!db) return false; try { await setDoc(doc(db, 'artifacts', currentRoomAppId, 'public', 'data', 'leaderboard', rec.deviceId), stripUndefined(rec)); return true; } catch (e) { return false; } };
     window.fetchCloudLeaderboardOnce = async function() {
       if (!db) return null;
       try {
@@ -3683,8 +3782,8 @@ export function buildGoogleSitesScripts(
         return list;
       } catch (e) { return null; }
     };
-    window.saveQuestionsToCloud = async function(items) { if (!db) return false; try { await setDoc(doc(db, 'artifacts', currentRoomAppId, 'public', 'data', 'config', 'questions_v2'), { items: items, updatedAt: new Date().toISOString() }); return true; } catch (e) { return false; } };
-    window.sendSabotageToCloud = async function(payload) { if (!db || !payload.targetDeviceId) return; try { await setDoc(doc(db, 'artifacts', currentRoomAppId, 'public', 'data', 'sabotage', payload.targetDeviceId), payload); } catch (e) {} };
+    window.saveQuestionsToCloud = async function(items) { if (!db) return false; try { await setDoc(doc(db, 'artifacts', currentRoomAppId, 'public', 'data', 'config', 'questions_v2'), stripUndefined({ items: items, updatedAt: new Date().toISOString() })); return true; } catch (e) { return false; } };
+    window.sendSabotageToCloud = async function(payload) { if (!db || !payload.targetDeviceId) return; try { await setDoc(doc(db, 'artifacts', currentRoomAppId, 'public', 'data', 'sabotage', payload.targetDeviceId), stripUndefined(payload)); } catch (e) {} };
     window.deleteSingleParticipantFromCloud = async function(id) { if (!db || !id) return; try { await deleteDoc(doc(db, 'artifacts', currentRoomAppId, 'public', 'data', 'leaderboard', id)); } catch (e) {} };
     window.resetCloudLeaderboard = async function() {
       if (!db) return;

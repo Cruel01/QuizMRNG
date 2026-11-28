@@ -450,7 +450,7 @@ export function mergeLiveAndFinishedLeaderboard(
       name: ap.name,
       teamName: ap.teamName,
       score: ap.score ?? 0,
-      correct: 0,
+      correct: ap.correct ?? 0,
       currentQuestion: ap.currentQuestion || 1,
       totalQuestions: ap.totalQuestions || defaultTotalQuestions,
       status: 'playing',
@@ -607,6 +607,18 @@ export function pickSabotageTarget(
   return null;
 }
 
+export function isFreeSessionMode(mode: SessionMode): boolean {
+  return mode === 'free_waiting' || mode === 'free';
+}
+
+export function isLiveSessionMode(mode: SessionMode): boolean {
+  return mode === 'live_waiting' || mode === 'live_started';
+}
+
+export function isSessionStarted(mode: SessionMode): boolean {
+  return mode === 'free' || mode === 'live_started';
+}
+
 export function getSessionLockFlags(
   sessionMode: SessionMode,
   waitingPlayers: WaitingPlayer[],
@@ -619,16 +631,12 @@ export function getSessionLockFlags(
     leaderboardPlayers.length > 0 ||
     freshActive.some((p) => p.mode === 'free' || !p.mode);
   const hasLiveEngagement =
-    waitingPlayers.length > 0 ||
     sessionMode === 'live_started' ||
-    freshActive.some(
-      (p) => p.mode === 'live_waiting' || p.mode === 'live_started'
-    );
+    freshActive.some((p) => p.mode === 'live_started') ||
+    (leaderboardPlayers.length > 0 && isLiveSessionMode(sessionMode));
 
-  const isFreeLockedOut =
-    (sessionMode === 'live_waiting' || sessionMode === 'live_started') &&
-    hasLiveEngagement;
-  const isLiveLockedOut = sessionMode === 'free' && hasFreeEngagement;
+  const isFreeLockedOut = isLiveSessionMode(sessionMode) && hasLiveEngagement;
+  const isLiveLockedOut = isFreeSessionMode(sessionMode) && hasFreeEngagement;
 
   return {
     hasFreeEngagement,
@@ -636,6 +644,7 @@ export function getSessionLockFlags(
     isFreeLockedOut,
     isLiveLockedOut,
     freshActiveCount: freshActive.length,
+    waitingCount: waitingPlayers.length,
   };
 }
 

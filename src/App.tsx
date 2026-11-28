@@ -450,6 +450,7 @@ export default function App() {
           teamName: effectiveTeam || undefined,
           mode: modeUsed,
           score: 0,
+          correct: 0,
           currentQuestion: 1,
           totalQuestions: deck.length,
           startedAt: Date.now(),
@@ -697,16 +698,16 @@ export default function App() {
     return unsub;
   }, [completedRecordKey, deviceId, notify, roomCode, storageScope]);
 
-  // Auto-start when Admin clicks Mulai Live while player is in Waiting Room
+  // Auto-start when Admin presses Start (Mulai Live or Mulai Mode Bebas) while player is in Waiting Room
   useEffect(() => {
     const effectiveLocked = hasPlayedThisDevice && !settings.allowReplay;
     if (
       screen === 'waiting' &&
-      sessionMode === 'live_started' &&
+      (sessionMode === 'live_started' || sessionMode === 'free') &&
       !effectiveLocked &&
       playerName.trim()
     ) {
-      startGameplay(playerName.trim(), 'live_started', liveRunId);
+      startGameplay(playerName.trim(), sessionMode, liveRunId);
     }
   }, [
     hasPlayedThisDevice,
@@ -856,6 +857,7 @@ export default function App() {
           teamName: resolvedTeamName || undefined,
           mode: sessionMode,
           score: nextScore,
+          correct: nextCorrectCount,
           currentQuestion: currentQuestionIndex + 1,
           totalQuestions: playDeck.length,
           startedAt: Date.now(),
@@ -1296,7 +1298,7 @@ export default function App() {
     }
     setNameError('');
 
-    if (sessionMode === 'live_waiting') {
+    if (sessionMode === 'live_waiting' || sessionMode === 'free_waiting') {
       setScreen('waiting');
       joinWaitingRoomCloud({
         deviceId,
@@ -1376,6 +1378,22 @@ export default function App() {
     setActivePlayers([]);
     setSessionMode('unconfigured');
     const nextScope = clean || 'default';
+    const compactParam = readInitialCompactParam();
+    const localSettingsRaw = safeGetStorage(SETTINGS_STORAGE_KEY_PREFIX + nextScope);
+    if (localSettingsRaw) {
+      try {
+        const parsedCfg = JSON.parse(localSettingsRaw) as Partial<QuizSettings>;
+        setSettings({
+          ...DEFAULT_QUIZ_SETTINGS,
+          ...parsedCfg,
+          compactMode: compactParam || Boolean(parsedCfg.compactMode),
+        });
+      } catch {
+        setSettings({ ...DEFAULT_QUIZ_SETTINGS, compactMode: compactParam });
+      }
+    } else {
+      setSettings({ ...DEFAULT_QUIZ_SETTINGS, compactMode: compactParam });
+    }
     const localRecRaw = safeGetStorage(`quiz_completed_record_${nextScope}_${deviceId}`);
     if (localRecRaw) {
       try {
@@ -1385,6 +1403,25 @@ export default function App() {
       }
     } else {
       setSavedRecord(null);
+    }
+    const localProgRaw = safeGetStorage(`${IN_PROGRESS_KEY_PREFIX}${nextScope}_${deviceId}`);
+    if (localProgRaw) {
+      try {
+        const parsedProg = JSON.parse(localProgRaw) as InProgressState;
+        if (
+          parsedProg &&
+          parsedProg.playerName &&
+          Date.now() - (parsedProg.savedAt || 0) < 30 * 60 * 1000
+        ) {
+          setRecoverableProgress(parsedProg);
+        } else {
+          setRecoverableProgress(null);
+        }
+      } catch {
+        setRecoverableProgress(null);
+      }
+    } else {
+      setRecoverableProgress(null);
     }
     const localQRaw = safeGetStorage(CUSTOM_QUESTIONS_STORAGE_KEY_PREFIX + nextScope);
     if (localQRaw) {
@@ -1418,20 +1455,27 @@ export default function App() {
       activePlayers,
       leaderboard
     );
-    if (newMode === 'free' && flags.isFreeLockedOut) {
-      notify('Mode Bebas terkunci karena sesi Live sudah memiliki peserta!');
+    if (
+      (newMode === 'free_waiting' || newMode === 'free') &&
+      flags.isFreeLockedOut
+    ) {
+      notify('Mode Bebas terkunci karena sesi Live sudah berjalan/memiliki peserta!');
       return;
     }
     if (
       (newMode === 'live_waiting' || newMode === 'live_started') &&
       flags.isLiveLockedOut
     ) {
-      notify('Fitur Live terkunci karena sudah ada peserta di Mode Bebas!');
+      notify('Mode Live terkunci karena sudah ada peserta di Mode Bebas!');
       return;
     }
 
     const nextRunId =
-      newMode === 'live_started' ? `LIVE-${Date.now()}` : liveRunId;
+      newMode === 'live_started'
+        ? `LIVE-${Date.now()}`
+        : newMode === 'free'
+          ? `FREE-${Date.now()}`
+          : liveRunId;
     setSessionMode(newMode);
     setLiveRunId(nextRunId);
     saveSessionStateToCloud({
@@ -1441,8 +1485,9 @@ export default function App() {
     });
     const msgs: Record<SessionMode, string> = {
       unconfigured: 'Mode dikembalikan ke Menunggu Admin.',
-      free: 'Mode Bebas aktif! Peserta dapat langsung mulai.',
-      live_waiting: 'Ruang Tunggu Live dibuka!',
+      free_waiting: 'Mode Bebas disiapkan! Tekan Mulai Kuis Sekarang saat siap.',
+      free: 'Mode Bebas DIMULAI! Peserta dapat mengerjakan kuis sekarang.',
+      live_waiting: 'Mode Live disiapkan & Ruang Tunggu dibuka!',
       live_started: 'Kuis Live DIMULAI serentak!',
     };
     notify(msgs[newMode]);
@@ -1614,6 +1659,7 @@ export default function App() {
               playerName={playerName}
               teamName={resolvedTeamName || undefined}
               roomCode={roomCode}
+              sessionMode={sessionMode}
               gameplayMode={settings.gameplayMode}
               deviceId={deviceId}
               waitingPlayers={waitingPlayers}
@@ -1723,11 +1769,11 @@ export default function App() {
               deviceId={deviceId}
               totalQuestions={playDeck.length || questions.length}
               leaderboard={leaderboard}
+              activePlayers={activePlayers}
               playerResult={savedRecord}
               allowReplay={
                 settings.allowReplay &&
-                sessionMode !== 'unconfigured' &&
-                sessionMode !== 'live_waiting'
+                (sessionMode === 'free' || sessionMode === 'live_started')
               }
               showConfetti={showConfetti}
               isMuted={isMuted}

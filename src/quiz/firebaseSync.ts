@@ -130,6 +130,12 @@ export function initFirebaseSync(callbacks: FirebaseCallbacks): () => void {
             if (s && s.mode) {
               callbacks.onSessionUpdate(s);
             }
+          } else {
+            callbacks.onSessionUpdate({
+              mode: 'unconfigured',
+              runId: 'default',
+              updatedAt: 0,
+            });
           }
         })
       );
@@ -208,12 +214,28 @@ export function initFirebaseSync(callbacks: FirebaseCallbacks): () => void {
   };
 }
 
+function stripUndefined<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((item) => stripUndefined(item)) as unknown as T;
+  }
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (v !== undefined) {
+        out[k] = stripUndefined(v);
+      }
+    }
+    return out as T;
+  }
+  return value;
+}
+
 export async function saveSessionStateToCloud(payload: SessionState): Promise<void> {
   const db = getDb();
   if (!db) return;
   try {
     const ref = doc(db, 'artifacts', currentAppId, 'public', 'data', 'config', 'session');
-    await setDoc(ref, payload);
+    await setDoc(ref, stripUndefined(payload));
   } catch {
     // ignore network failure
   }
@@ -224,7 +246,7 @@ export async function saveQuizSettingsToCloud(settings: QuizSettings): Promise<v
   if (!db) return;
   try {
     const ref = doc(db, 'artifacts', currentAppId, 'public', 'data', 'config', 'settings');
-    await setDoc(ref, { ...settings, updatedAt: Date.now() });
+    await setDoc(ref, stripUndefined({ ...settings, updatedAt: Date.now() }));
   } catch {
     // ignore
   }
@@ -243,7 +265,7 @@ export async function joinWaitingRoomCloud(player: WaitingPlayer): Promise<void>
       'waiting_room',
       player.deviceId
     );
-    await setDoc(ref, player);
+    await setDoc(ref, stripUndefined(player));
   } catch {
     // ignore
   }
@@ -281,7 +303,7 @@ export async function upsertActivePlayerCloud(player: ActivePlayer): Promise<voi
       'active_players',
       player.deviceId
     );
-    await setDoc(ref, player);
+    await setDoc(ref, stripUndefined(player));
   } catch {
     // ignore
   }
@@ -349,7 +371,7 @@ export async function saveScoreToCloud(record: PlayerRecord): Promise<boolean> {
       'leaderboard',
       record.deviceId
     );
-    await setDoc(ref, record);
+    await setDoc(ref, stripUndefined(record));
     return true;
   } catch {
     return false;
@@ -390,7 +412,7 @@ export async function saveQuestionsToCloud(questions: Question[]): Promise<boole
       'config',
       'questions_v2'
     );
-    await setDoc(ref, { items: questions, updatedAt: new Date().toISOString() });
+    await setDoc(ref, stripUndefined({ items: questions, updatedAt: new Date().toISOString() }));
     return true;
   } catch {
     return false;
@@ -410,7 +432,7 @@ export async function sendSabotageToCloud(payload: SabotageEvent): Promise<void>
       'sabotage',
       payload.targetDeviceId
     );
-    await setDoc(ref, payload);
+    await setDoc(ref, stripUndefined(payload));
   } catch {
     // ignore
   }

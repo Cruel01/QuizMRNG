@@ -14,10 +14,10 @@ import {
 } from 'lucide-react';
 import {
   aggregateTeamLeaderboard,
-  getPlayerRankInfo,
+  mergeLiveAndFinishedLeaderboard,
 } from '../quiz/engine';
 import { playPopClickFx } from '../quiz/soundFx';
-import type { PlayerRecord } from '../quiz/types';
+import type { ActivePlayer, PlayerRecord } from '../quiz/types';
 import { GleamingTrophyIcon } from './AnimatedIcons';
 import { ConfettiBurst } from './ConfettiBurst';
 
@@ -25,6 +25,7 @@ interface LeaderboardScreenProps {
   deviceId: string;
   totalQuestions: number;
   leaderboard: PlayerRecord[];
+  activePlayers?: ActivePlayer[];
   playerResult: PlayerRecord | null;
   allowReplay: boolean;
   showConfetti: boolean;
@@ -39,6 +40,7 @@ export const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({
   deviceId,
   totalQuestions,
   leaderboard,
+  activePlayers = [],
   playerResult,
   allowReplay,
   showConfetti,
@@ -54,25 +56,33 @@ export const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({
     'individual'
   );
 
-  const sorted = useMemo(
-    () => [...leaderboard].sort((a, b) => (b.score || 0) - (a.score || 0)),
-    [leaderboard]
+  const mergedRows = useMemo(
+    () =>
+      mergeLiveAndFinishedLeaderboard(
+        leaderboard,
+        activePlayers,
+        totalQuestions
+      ),
+    [leaderboard, activePlayers, totalQuestions]
   );
 
   const teamStandings = useMemo(
-    () => aggregateTeamLeaderboard(sorted),
-    [sorted]
+    () => aggregateTeamLeaderboard(mergedRows),
+    [mergedRows]
   );
 
   const hasAnyTeams = useMemo(
-    () => sorted.some((p) => Boolean(p.teamName && p.teamName.trim())),
-    [sorted]
+    () => mergedRows.some((p) => Boolean(p.teamName && p.teamName.trim())),
+    [mergedRows]
   );
 
-  const rankInfo = useMemo(
-    () => getPlayerRankInfo(leaderboard, deviceId),
-    [leaderboard, deviceId]
-  );
+  const rankInfo = useMemo(() => {
+    const idx = mergedRows.findIndex((p) => p.deviceId === deviceId);
+    return {
+      rank: idx >= 0 ? idx + 1 : null,
+      total: mergedRows.length,
+    };
+  }, [mergedRows, deviceId]);
 
   const wrongCount = useMemo(() => {
     if (!playerResult || !Array.isArray(playerResult.history)) return 0;
@@ -225,7 +235,7 @@ export const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({
                 : 'text-slate-300 hover:text-white'
             }`}
           >
-            Individu ({sorted.length})
+            Individu ({mergedRows.length})
           </button>
           <button
             type="button"
@@ -255,12 +265,12 @@ export const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({
           </div>
 
           <div className="divide-y divide-[#23304C]/70 max-h-80 overflow-y-auto">
-            {sorted.length === 0 ? (
+            {mergedRows.length === 0 ? (
               <div className="p-8 text-center text-sm text-slate-400">
-                Belum ada peserta yang menyelesaikan kuis.
+                Belum ada peserta yang bermain atau menyelesaikan kuis.
               </div>
             ) : (
-              sorted.map((player, index) => {
+              mergedRows.map((player, index) => {
                 const rank = index + 1;
                 const isMe = player.deviceId === deviceId;
                 return (
@@ -296,11 +306,24 @@ export const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({
                           </span>
                         )}
                       </div>
-                      {player.teamName && (
-                        <div className="text-[11px] text-sky-300 font-semibold truncate">
-                          Tim {player.teamName}
-                        </div>
-                      )}
+                      <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-semibold truncate">
+                        {player.teamName && (
+                          <span className="text-sky-300">
+                            Tim {player.teamName} ·
+                          </span>
+                        )}
+                        <span
+                          className={`font-mono-num ${
+                            player.status === 'finished'
+                              ? 'text-emerald-400'
+                              : 'text-sky-300'
+                          }`}
+                        >
+                          {player.status === 'finished'
+                            ? 'Selesai'
+                            : `Bermain · Soal ${player.currentQuestion}/${player.totalQuestions}`}
+                        </span>
+                      </div>
                     </div>
                     <div className="col-span-2 text-center font-mono-num text-emerald-400 font-semibold">
                       {player.correct}/{player.totalQuestions || totalQuestions}
