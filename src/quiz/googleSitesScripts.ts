@@ -15,6 +15,7 @@ export function buildGoogleSitesScripts(
     var MUTE_STORAGE_KEY = 'quiz_sfx_muted_v1';
     var ROOM_CODE_STORAGE_KEY = 'quiz_active_room_code_v1';
 
+    var ALL_POWERUP_IDS = ['DOUBLE_SCORE', 'FIFTY_FIFTY', 'SHIELD', 'FREEZE_LEADER', 'GLITCH_SHUFFLE', 'TORNADO'];
     var POWERUPS = {
       DOUBLE_SCORE: { id: 'DOUBLE_SCORE', name: 'Skor 2x', kind: 'buff', weight: 10, desc: 'Menggandakan poin pada soal aktif ini!' },
       FIFTY_FIFTY: { id: 'FIFTY_FIFTY', name: '50:50', kind: 'buff', weight: 25, desc: 'Menghapus 2 opsi jawaban yang salah.' },
@@ -23,6 +24,14 @@ export function buildGoogleSitesScripts(
       GLITCH_SHUFFLE: { id: 'GLITCH_SHUFFLE', name: 'Acak Opsi', kind: 'debuff', weight: 20, desc: 'Mengacak posisi tombol opsi lawan pada soal berikutnya.' },
       TORNADO: { id: 'TORNADO', name: 'Puting Beliung', kind: 'debuff', weight: 22, desc: 'Badai angin 5 detik mengguncang layar & mengacak opsi lawan!' }
     };
+    function getPowerupSvgHtml(id) {
+      if (id === 'DOUBLE_SCORE') return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-amber-300" aria-hidden="true"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></svg>';
+      if (id === 'FIFTY_FIFTY') return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-sky-300" aria-hidden="true"><circle cx="6" cy="6" r="3"/><path d="M8.12 8.12 12 12"/><path d="M20 4 8.12 15.88"/><circle cx="6" cy="18" r="3"/><path d="M14.8 14.8 20 20"/></svg>';
+      if (id === 'SHIELD') return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-emerald-300" aria-hidden="true"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg>';
+      if (id === 'FREEZE_LEADER') return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-cyan-300" aria-hidden="true"><line x1="2" x2="22" y1="12" y2="12"/><line x1="12" x2="12" y1="2" y2="22"/><path d="m20 16-4-4 4-4"/><path d="m4 8 4 4-4 4"/><path d="m16 4-4 4-4-4"/><path d="m8 20 4-4 4 4"/></svg>';
+      if (id === 'GLITCH_SHUFFLE') return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-fuchsia-300" aria-hidden="true"><path d="m18 14 4 4-4 4"/><path d="m18 2 4 4-4 4"/><path d="M2 18h1.973a4 4 0 0 0 3.3-1.7l5.454-8.6a4 4 0 0 1 3.3-1.7H22"/><path d="M2 6h1.972a4 4 0 0 1 3.6 2.2"/><path d="M22 18h-6.041a4 4 0 0 1-3.3-1.8l-.359-.45"/></svg>';
+      return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-rose-300" aria-hidden="true"><path d="M21 4H3"/><path d="M18 8H6"/><path d="M19 12H9"/><path d="M16 16h-6"/><path d="M11 20H9"/></svg>';
+    }
 
     var memoryStorage = {};
     function safeGetStorage(k) {
@@ -148,6 +157,7 @@ export function buildGoogleSitesScripts(
     loadScopedLocalState();
 
     // Runtime Game State
+    var roomGateUnlocked = (initialParamRoom !== null) || isAutostartDemo;
     var currentSessionMode = isAutostartDemo ? 'free' : 'unconfigured';
     var currentLiveRunId = isAutostartDemo ? 'autostart' : 'default';
     var waitingPlayers = [];
@@ -429,15 +439,53 @@ export function buildGoogleSitesScripts(
         freshActiveCount: fresh.length
       };
     }
+    function getConfiguredPowerups() {
+      if (!settings || settings.enabledPowerups === undefined || !Array.isArray(settings.enabledPowerups)) {
+        return ALL_POWERUP_IDS.slice();
+      }
+      var seen = {};
+      var res = [];
+      for (var i = 0; i < settings.enabledPowerups.length; i++) {
+        var pid = settings.enabledPowerups[i];
+        if (POWERUPS[pid] && !seen[pid]) {
+          seen[pid] = true;
+          res.push(pid);
+        }
+      }
+      return res;
+    }
+    function getEnabledPowerups() {
+      if (!isGamificationActive()) return [];
+      return getConfiguredPowerups();
+    }
+    function isPowerupEnabled(id) {
+      return getEnabledPowerups().indexOf(id) !== -1;
+    }
+    function isStreakRewardActive() {
+      if (!isGamificationActive()) return false;
+      if (settings && settings.streakEnabled === false) return false;
+      return getEnabledPowerups().length > 0;
+    }
+    function isMilestoneDropActive() {
+      if (!isGamificationActive()) return false;
+      if (settings && settings.milestoneDropsEnabled === false) return false;
+      var list = getEnabledPowerups();
+      for (var i = 0; i < list.length; i++) {
+        if (POWERUPS[list[i]] && POWERUPS[list[i]].kind === 'debuff') return true;
+      }
+      return false;
+    }
     function rollPowerup(onlyKind) {
-      var pool = Object.keys(POWERUPS).map(function(k) { return POWERUPS[k]; }).filter(function(p) { return !onlyKind || p.kind === onlyKind; });
+      var allowed = getEnabledPowerups();
+      var pool = allowed.map(function(k) { return POWERUPS[k]; }).filter(function(p) { return p && (!onlyKind || p.kind === onlyKind); });
+      if (pool.length === 0) return null;
       var total = pool.reduce(function(s, p) { return s + p.weight; }, 0);
       var r = Math.random() * total;
       for (var i = 0; i < pool.length; i++) {
         if (r < pool[i].weight) return pool[i].id;
         r -= pool[i].weight;
       }
-      return pool[0].id;
+      return pool[0] ? pool[0].id : null;
     }
 
     function isGlobalQuizTimerActive() {
@@ -504,6 +552,26 @@ export function buildGoogleSitesScripts(
         shipPercent: Math.min(100, Math.round((safeAns / safeTotal) * 100))
       };
     }
+    function isGamificationActive() {
+      return !settings || settings.gamificationEnabled !== false;
+    }
+    function isTeamParticipationAvailable() {
+      return settings && settings.gameplayMode === 'voyage';
+    }
+    function getEffectiveParticipationMode() {
+      if (!isTeamParticipationAvailable()) return 'solo';
+      return (settings && settings.participationMode) || 'either';
+    }
+    function parseClassGateInput(raw) {
+      var clean = sanitizeRoomCode(raw);
+      if (!clean) {
+        return { valid: false, roomCode: '', displayLabel: '', error: 'Silakan masukkan kode kelas terlebih dahulu (misalnya KELAS8A atau UMUM).' };
+      }
+      if (clean === 'UMUM' || clean === 'DEFAULT') {
+        return { valid: true, roomCode: '', displayLabel: 'Umum' };
+      }
+      return { valid: true, roomCode: clean, displayLabel: '#' + clean };
+    }
     function aggregateTeamLeaderboard(records) {
       var map = {};
       var order = [];
@@ -542,7 +610,7 @@ export function buildGoogleSitesScripts(
       return keys.map(function(k) { return map[k]; }).sort(function(a, b) { return b.score - a.score; });
     }
     function getResolvedTeamName() {
-      var pm = settings.participationMode || 'either';
+      var pm = getEffectiveParticipationMode();
       if (pm === 'solo') return '';
       if (pm === 'team') return (teamName || '').trim();
       return teamModeChoice === 'team' ? (teamName || '').trim() : '';
@@ -616,16 +684,85 @@ export function buildGoogleSitesScripts(
       if (hintLbl) hintLbl.classList.toggle('hidden', tab !== 'categories');
     }
 
+    function submitLobbyRoomGate() {
+      playPopClickFx();
+      var inp = document.getElementById('lobby-room-gate-input');
+      var errEl = document.getElementById('lobby-room-gate-error');
+      var res = parseClassGateInput(inp ? inp.value : '');
+      if (!res.valid) {
+        if (errEl) {
+          errEl.textContent = res.error;
+          errEl.classList.remove('hidden');
+        }
+        if (inp) inp.focus();
+        return;
+      }
+      if (errEl) errEl.classList.add('hidden');
+      switchRoomScope(res.roomCode);
+      roomGateUnlocked = true;
+      updateLobbyUI();
+      showToast('Berhasil masuk kelas ' + res.displayLabel + '!');
+    }
+
+    function renderLobbyPowerups() {
+      var panel = document.getElementById('lobby-panel-powerups');
+      var btnPow = document.getElementById('tab-btn-powerups');
+      var enabled = getEnabledPowerups();
+      if (btnPow) btnPow.textContent = 'Buff & Debuff (' + enabled.length + ')';
+      if (!panel) return;
+      panel.innerHTML = enabled.map(function(id) {
+        var item = POWERUPS[id];
+        if (!item) return '';
+        var isBuff = item.kind === 'buff';
+        return '<div class="bg-[#0B1120] border border-[#23304C] rounded-xl p-3.5 flex items-start gap-3">' +
+          '<div class="w-8 h-8 rounded-lg bg-[#131C31] border border-[#23304C] flex items-center justify-center shrink-0">' + getPowerupSvgHtml(item.id) + '</div>' +
+          '<div class="min-w-0">' +
+            '<div class="flex items-center gap-2 text-xs font-bold text-white"><span>' + escapeHtml(item.name) + '</span><span class="text-slate-500">·</span><span class="' + (isBuff ? 'text-emerald-400' : 'text-sky-400') + '">' + (isBuff ? 'Buff' : 'Debuff') + '</span></div>' +
+            '<p class="text-xs text-slate-400 mt-0.5 leading-snug">' + escapeHtml(item.desc) + '</p>' +
+          '</div></div>';
+      }).join('');
+    }
+
     function updateLobbyUI() {
       applyCompactModeUI();
       renderLobbyCategories();
+      renderLobbyPowerups();
 
+      var gateBox = document.getElementById('lobby-room-gate');
+      var unlockedBox = document.getElementById('lobby-unlocked-content');
+      var btnRoomHeader = document.getElementById('btn-lobby-room');
+      var statusEl = document.getElementById('lobby-mode-status');
+      var textEl = document.getElementById('lobby-mode-text');
+      var hgEl = document.getElementById('lobby-header-hourglass');
+
+      var gamActive = isGamificationActive();
+      var enabledPow = getEnabledPowerups();
+      var showPowTab = gamActive && enabledPow.length > 0;
+      var voyageMode = isTeamParticipationAvailable();
       var limit = Math.max(0, Math.floor(Number(settings.questionLimit) || 0));
       var effectiveCount = (limit > 0 && limit < questions.length) ? limit : questions.length;
       var targetStr = (limit > 0 && limit < questions.length) ? (limit + ' dari ' + questions.length) : String(questions.length);
-      document.getElementById('lobby-total-questions').textContent = targetStr;
       var durMins = Number(settings.quizDurationMinutes) || 0;
-      var flagsStr = (settings.gameplayMode === 'voyage' ? (' · Berlayar ' + buildVoyageCheckpoints(effectiveCount).length + ' Pulau') : '') +
+
+      document.getElementById('lobby-total-questions').textContent = targetStr;
+      var subModeEl = document.getElementById('lobby-subtitle-mode');
+      if (subModeEl) {
+        if (voyageMode) {
+          subModeEl.textContent = 'Berlayar Harta Karun';
+          subModeEl.className = 'text-sky-300 font-semibold';
+        } else if (!gamActive || enabledPow.length === 0) {
+          subModeEl.textContent = 'Kuis interaktif real-time';
+          subModeEl.className = '';
+        } else if (enabledPow.length === 1) {
+          subModeEl.textContent = 'Fitur ' + POWERUPS[enabledPow[0]].name + ' aktif';
+          subModeEl.className = '';
+        } else {
+          var hasDebuff = enabledPow.some(function(pid) { return POWERUPS[pid] && POWERUPS[pid].kind === 'debuff'; });
+          subModeEl.textContent = hasDebuff ? 'Buff & Debuff real-time' : 'Buff real-time aktif';
+          subModeEl.className = '';
+        }
+      }
+      var flagsStr = (voyageMode ? (' · ' + buildVoyageCheckpoints(effectiveCount).length + ' Pulau') : '') +
         (durMins > 0 ? (' · Timer ' + durMins + ' Menit') : '') +
         (settings.allowReplay ? ' · Mode Latihan' : '') +
         (settings.shuffleQuestions ? ' · Soal Acak' : '');
@@ -633,11 +770,38 @@ export function buildGoogleSitesScripts(
       document.getElementById('lobby-room-label').textContent = activeRoomCode ? ('#' + activeRoomCode) : 'Umum';
       document.getElementById('admin-room-badge').textContent = activeRoomCode ? ('#' + activeRoomCode) : 'Umum (Default)';
 
-      var partMode = settings.participationMode || 'either';
+      if (gateBox) gateBox.classList.toggle('hidden', roomGateUnlocked);
+      if (unlockedBox) unlockedBox.classList.toggle('hidden', !roomGateUnlocked);
+      if (btnRoomHeader) btnRoomHeader.classList.toggle('hidden', !roomGateUnlocked);
+      if (statusEl) statusEl.classList.toggle('hidden', !roomGateUnlocked);
+
+      var btnPowTab = document.getElementById('tab-btn-powerups');
+      if (btnPowTab) btnPowTab.classList.toggle('hidden', !showPowTab);
+      if (!showPowTab && lobbyTab === 'powerups') {
+        lobbyTab = 'categories';
+        var btnCatEl = document.getElementById('tab-btn-categories');
+        var pCatEl = document.getElementById('lobby-panel-categories');
+        var pPowEl = document.getElementById('lobby-panel-powerups');
+        var hintEl = document.getElementById('lobby-cat-hint-label');
+        if (btnCatEl) {
+          btnCatEl.className = 'px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer whitespace-nowrap bg-amber-400 text-slate-950';
+          btnCatEl.setAttribute('aria-selected', 'true');
+        }
+        if (pCatEl) pCatEl.classList.remove('hidden');
+        if (pPowEl) pPowEl.classList.add('hidden');
+        if (hintEl) hintEl.classList.remove('hidden');
+      }
+
+      var effectivePartMode = getEffectiveParticipationMode();
+      var showPartChoice = voyageMode && effectivePartMode === 'either';
+      var showTeamInp = voyageMode && (effectivePartMode === 'team' || (effectivePartMode === 'either' && teamModeChoice === 'team'));
       var partWrap = document.getElementById('lobby-participation-wrap');
       var teamWrap = document.getElementById('lobby-team-input-wrap');
-      if (partWrap) partWrap.classList.toggle('hidden', partMode !== 'either');
-      if (teamWrap) teamWrap.classList.toggle('hidden', !(partMode === 'team' || (partMode === 'either' && teamModeChoice === 'team')));
+      var pNameLbl = document.getElementById('player-name-label');
+      if (partWrap) partWrap.classList.toggle('hidden', !showPartChoice);
+      if (teamWrap) teamWrap.classList.toggle('hidden', !showTeamInp);
+      if (pNameLbl) pNameLbl.textContent = showTeamInp ? 'Nama Pelaut / Anggota' : 'Nama Pemain';
+
       var btnSolo = document.getElementById('btn-part-solo');
       var btnTeam = document.getElementById('btn-part-team');
       if (btnSolo && btnTeam) {
@@ -647,30 +811,27 @@ export function buildGoogleSitesScripts(
       var btnWaitLb = document.getElementById('btn-waiting-live-lb');
       if (btnWaitLb) btnWaitLb.classList.toggle('hidden', !settings.showLiveLeaderboardToPlayers);
 
-      var statusEl = document.getElementById('lobby-mode-status');
-      var textEl = document.getElementById('lobby-mode-text');
-      var hgEl = document.getElementById('lobby-header-hourglass');
       if (currentSessionMode === 'unconfigured') {
-        statusEl.className = 'inline-flex items-center gap-2 text-xs font-semibold text-amber-300';
+        statusEl.className = 'inline-flex items-center gap-2 text-xs font-semibold text-amber-300' + (roomGateUnlocked ? '' : ' hidden');
         textEl.textContent = 'Menunggu Admin memilih mode kuis';
         hgEl.classList.remove('hidden');
       } else if (currentSessionMode === 'free') {
-        statusEl.className = 'inline-flex items-center gap-2 text-xs font-semibold text-emerald-400';
-        textEl.textContent = 'Mode Bebas · Langsung main';
+        statusEl.className = 'inline-flex items-center gap-2 text-xs font-semibold text-emerald-400' + (roomGateUnlocked ? '' : ' hidden');
+        textEl.textContent = 'Mode Bebas · Kerjakan Mandiri';
         hgEl.classList.add('hidden');
       } else if (currentSessionMode === 'live_waiting') {
-        statusEl.className = 'inline-flex items-center gap-2 text-xs font-semibold text-amber-300';
-        textEl.textContent = 'Mode Live · Ruang tunggu dibuka';
+        statusEl.className = 'inline-flex items-center gap-2 text-xs font-semibold text-amber-300' + (roomGateUnlocked ? '' : ' hidden');
+        textEl.textContent = 'Mode Live · Ruang Tunggu Dibuka';
         hgEl.classList.remove('hidden');
       } else {
-        statusEl.className = 'inline-flex items-center gap-2 text-xs font-semibold text-rose-400';
-        textEl.textContent = 'Mode Live · Sesi sedang berlangsung';
+        statusEl.className = 'inline-flex items-center gap-2 text-xs font-semibold text-rose-400' + (roomGateUnlocked ? '' : ' hidden');
+        textEl.textContent = 'Mode Live · Sesi Berlangsung';
         hgEl.classList.add('hidden');
       }
 
       var effectiveLocked = hasPlayedThisDevice && !settings.allowReplay;
       var recBanner = document.getElementById('recoverable-progress-banner');
-      if (recoverableProgress && !effectiveLocked) {
+      if (recoverableProgress && !effectiveLocked && roomGateUnlocked) {
         recBanner.classList.remove('hidden');
         document.getElementById('recoverable-progress-info').innerHTML =
           'Lanjutkan sebagai <strong class="text-white">' + escapeHtml(recoverableProgress.playerName) + '</strong> di soal #' +
@@ -681,6 +842,11 @@ export function buildGoogleSitesScripts(
 
       var awaitBanner = document.getElementById('awaiting-admin-mode-banner');
       var inputBox = document.getElementById('lobby-input-container');
+      var modeHeader = document.getElementById('lobby-mode-panel-header');
+      var modeTitle = document.getElementById('lobby-mode-panel-title');
+      var modeCount = document.getElementById('lobby-mode-panel-count');
+      var modeDesc = document.getElementById('lobby-mode-panel-desc');
+      var modeMeta = document.getElementById('lobby-mode-panel-meta');
       var playedBanner = document.getElementById('already-played-banner');
       var replayHint = document.getElementById('lobby-replay-hint');
       var btnStart = document.getElementById('btn-start-quiz');
@@ -706,22 +872,69 @@ export function buildGoogleSitesScripts(
         btnStart.className = 'flex-1 bg-slate-800/80 text-slate-400 font-bold text-sm sm:text-base py-3.5 px-6 rounded-xl border border-slate-700 cursor-not-allowed inline-flex items-center justify-center gap-2 whitespace-nowrap';
         btnStart.textContent = 'Menunggu Admin...';
       } else {
+        var isLive = currentSessionMode === 'live_waiting' || currentSessionMode === 'live_started';
+        var freshCnt = filterFreshActivePlayers(activePlayers).length;
         awaitBanner.classList.add('hidden');
         inputBox.classList.remove('hidden');
         playedBanner.classList.add('hidden');
+        inputBox.className = 'max-w-xl mx-auto mb-6 rounded-2xl border bg-[#0B1120] overflow-hidden ' + (isLive ? 'border-amber-400/35' : 'border-emerald-500/35');
+        if (modeHeader) {
+          modeHeader.className = 'px-5 py-4 border-b flex items-start gap-3 ' + (isLive ? 'bg-amber-400/[0.08] border-amber-400/20' : 'bg-emerald-500/[0.08] border-emerald-500/20');
+        }
+        if (modeTitle) {
+          modeTitle.className = 'text-sm sm:text-base font-extrabold ' + (isLive ? 'text-amber-300' : 'text-emerald-300');
+          modeTitle.textContent = currentSessionMode === 'free'
+            ? 'Mode Bebas · Kerjakan Mandiri'
+            : currentSessionMode === 'live_waiting'
+              ? 'Mode Live · Ruang Tunggu Serentak'
+              : 'Mode Live · Arena Sedang Berlangsung';
+        }
+        if (modeCount) {
+          modeCount.textContent = isLive
+            ? (currentSessionMode === 'live_waiting' ? (waitingPlayers.length + ' di ruang tunggu') : (freshCnt + ' sedang bermain'))
+            : 'Langsung mulai';
+        }
+        if (modeDesc) {
+          modeDesc.textContent = currentSessionMode === 'free'
+            ? 'Kerjakan kapan saja sesuai kecepatanmu sendiri tanpa perlu menunggu peserta lain di ruang tunggu.'
+            : currentSessionMode === 'live_waiting'
+              ? 'Masukkan namamu untuk masuk ke Ruang Tunggu Live. Kuis akan dimulai serentak ketika Admin menekan Mulai Live.'
+              : 'Sesi Live sudah dimulai! Masukkan namamu untuk langsung menyusul masuk bersama peserta lainnya.';
+        }
+        if (modeMeta) {
+          var timerLbl = durMins > 0 ? ('Timer ' + durMins + ' Menit') : 'Timer per soal';
+          if (currentSessionMode === 'free') {
+            modeMeta.innerHTML = '<span>Tanpa ruang tunggu</span><span>·</span><span>' + timerLbl + '</span>' + (settings.allowReplay ? '<span>·</span><span class="text-emerald-300">Boleh ulang</span>' : '');
+          } else {
+            var standbyNames = waitingPlayers.slice(0, 3).map(function(w) { return escapeHtml(w.name); }).join(', ');
+            var extraStandby = waitingPlayers.length > 3 ? (' +' + (waitingPlayers.length - 3)) : '';
+            modeMeta.innerHTML = '<span class="text-amber-200">Sesi serentak</span><span>·</span><span>' + timerLbl + '</span>' +
+              ((currentSessionMode === 'live_waiting' && waitingPlayers.length > 0) ? ('<span>·</span><span>Standby: ' + standbyNames + extraStandby + '</span>') : '');
+          }
+        }
         if (replayHint) replayHint.classList.toggle('hidden', !(settings.allowReplay && hasPlayedThisDevice));
         btnStart.disabled = false;
-        btnStart.className = 'arcade-btn-amber flex-1 bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-sm sm:text-base py-3.5 px-6 rounded-xl cursor-pointer inline-flex items-center justify-center gap-2 whitespace-nowrap';
-        btnStart.textContent = currentSessionMode === 'live_waiting'
-          ? 'Gabung Ruang Tunggu Live'
-          : (hasPlayedThisDevice && settings.allowReplay ? 'Main Lagi Sekarang' : 'Mulai Kuis Sekarang');
+        if (currentSessionMode === 'free') {
+          btnStart.className = 'arcade-btn flex-1 bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-extrabold text-sm sm:text-base py-3.5 px-6 rounded-xl cursor-pointer inline-flex items-center justify-center gap-2 whitespace-nowrap';
+          btnStart.textContent = (hasPlayedThisDevice && settings.allowReplay)
+            ? 'Main Lagi Sekarang'
+            : (voyageMode ? 'Mulai Berlayar Mandiri' : 'Mulai Kuis Mandiri');
+        } else {
+          btnStart.className = 'arcade-btn-amber flex-1 bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-sm sm:text-base py-3.5 px-6 rounded-xl cursor-pointer inline-flex items-center justify-center gap-2 whitespace-nowrap';
+          btnStart.textContent = currentSessionMode === 'live_waiting' ? 'Masuk Ruang Tunggu Live' : 'Gabung Arena Live Sekarang';
+        }
       }
 
       if (activeScreen === 'waiting' && currentSessionMode === 'live_started' && !effectiveLocked && playerName) {
         startGameplay(playerName, 'live_started', currentLiveRunId, false, false);
       }
+      if (activeScreen === 'waiting') {
+        renderWaitingRoom();
+      }
       if (activeScreen === 'admin') {
         renderAdminSessionControls();
+        renderAdminGamificationControls();
+        renderAdminSettingsControls();
       }
     }
 
@@ -741,7 +954,8 @@ export function buildGoogleSitesScripts(
       document.getElementById('modal-room').classList.add('hidden');
     }
     function switchRoomScope(rawCode) {
-      var clean = sanitizeRoomCode(rawCode);
+      var san = sanitizeRoomCode(rawCode);
+      var clean = (san === 'UMUM' || san === 'DEFAULT') ? '' : san;
       if (clean === activeRoomCode) return;
       activeRoomCode = clean;
       safeSetStorage(ROOM_CODE_STORAGE_KEY, clean);
@@ -763,7 +977,9 @@ export function buildGoogleSitesScripts(
       playPopClickFx();
       var val = document.getElementById('room-modal-input').value;
       switchRoomScope(val);
+      roomGateUnlocked = true;
       closeRoomModal();
+      updateLobbyUI();
       showToast(activeRoomCode ? ('Bergabung ke Ruangan #' + activeRoomCode) : 'Beralih ke Ruangan Umum');
     }
 
@@ -777,7 +993,7 @@ export function buildGoogleSitesScripts(
       var tVal = teamInp ? (teamInp.value || '').trim() : '';
       var err = document.getElementById('name-error');
       if (!name) { err.textContent = 'Silakan masukkan nama terlebih dahulu.'; err.classList.remove('hidden'); inp.focus(); return; }
-      var pm = settings.participationMode || 'either';
+      var pm = getEffectiveParticipationMode();
       if ((pm === 'team' || (pm === 'either' && teamModeChoice === 'team')) && !tVal) {
         err.textContent = 'Silakan masukkan nama tim / kru terlebih dahulu.';
         err.classList.remove('hidden');
@@ -790,7 +1006,6 @@ export function buildGoogleSitesScripts(
 
       var resolvedTeam = getResolvedTeamName();
       if (currentSessionMode === 'live_waiting') {
-        document.getElementById('waiting-my-name').textContent = resolvedTeam ? (name + ' (Tim ' + resolvedTeam + ')') : name;
         showScreen('waiting');
         renderWaitingRoom();
         if (window.joinWaitingRoomCloud) window.joinWaitingRoomCloud({ deviceId: myDeviceId, name: name, teamName: resolvedTeam || undefined, joinedAt: Date.now() });
@@ -802,6 +1017,17 @@ export function buildGoogleSitesScripts(
     function renderWaitingRoom() {
       var badge = document.getElementById('waiting-count-badge');
       var listEl = document.getElementById('waiting-players-list');
+      var roomBadge = document.getElementById('waiting-room-badge');
+      var gmLbl = document.getElementById('waiting-gameplay-label');
+      var myNameEl = document.getElementById('waiting-my-name');
+      var isVoy = isTeamParticipationAvailable();
+      var resolvedTeam = getResolvedTeamName();
+
+      if (roomBadge) roomBadge.textContent = activeRoomCode ? ('#' + activeRoomCode) : 'Umum';
+      if (gmLbl) gmLbl.textContent = isVoy ? 'Berlayar Harta Karun' : 'Kuis Klasik Serentak';
+      if (myNameEl) {
+        myNameEl.textContent = (playerName || 'Peserta') + (isVoy ? (resolvedTeam ? (' · Tim ' + resolvedTeam) : ' · Solo') : '');
+      }
       if (badge) badge.textContent = waitingPlayers.length + ' Bergabung';
       if (!listEl) return;
       if (waitingPlayers.length === 0) {
@@ -811,7 +1037,7 @@ export function buildGoogleSitesScripts(
       listEl.innerHTML = waitingPlayers.map(function(p) {
         var isMe = p.deviceId === myDeviceId;
         var cls = isMe ? 'bg-amber-400 text-slate-950' : 'bg-[#131C31] text-slate-200 border border-[#23304C]';
-        var tTag = p.teamName ? (' · ' + escapeHtml(p.teamName)) : '';
+        var tTag = (isVoy && p.teamName) ? (' · ' + escapeHtml(p.teamName)) : '';
         return '<span class="px-3 py-1.5 rounded-lg text-xs font-bold ' + cls + '">' + escapeHtml(p.name) + tTag + (isMe ? ' (Kamu)' : '') + '</span>';
       }).join('');
     }
@@ -972,6 +1198,17 @@ export function buildGoogleSitesScripts(
     }
 
     function renderPowerupSlots() {
+      var gamBar = document.getElementById('quiz-gamification-bar');
+      var gamActive = isGamificationActive();
+      var enabledList = getEnabledPowerups();
+      var showBar = gamActive && enabledList.length > 0;
+      if (gamBar) gamBar.classList.toggle('hidden', !showBar);
+      var buffsElGate = document.getElementById('quiz-active-buffs');
+      if (!showBar) {
+        if (buffsElGate) buffsElGate.classList.add('hidden');
+        return;
+      }
+
       var container = document.getElementById('powerup-slots-container');
       var html = '';
       for (var i = 0; i < 2; i++) {
@@ -989,8 +1226,21 @@ export function buildGoogleSitesScripts(
       }
       container.innerHTML = html;
 
+      var streakBox = document.getElementById('quiz-streak-box');
+      var streakOffNote = document.getElementById('quiz-streak-disabled-note');
+      var streakOn = !(settings && settings.streakEnabled === false);
+      if (streakBox) streakBox.classList.toggle('hidden', !streakOn);
+      if (streakOffNote) {
+        streakOffNote.classList.toggle('hidden', streakOn);
+        if (!streakOn) {
+          streakOffNote.innerHTML = 'Fitur aktif: <span class="text-amber-300 font-bold">' +
+            enabledList.map(function(pid) { return escapeHtml(POWERUPS[pid].name); }).join(', ') + '</span>';
+        }
+      }
+
       var streakTarget = getStreakRewardTarget(playDeck.length);
       var milestones = getDebuffMilestones(playDeck.length);
+      var showMs = isMilestoneDropActive() && milestones.length > 0;
       document.getElementById('streak-counter-text').textContent = 'Streak ' + currentStreak + '/' + streakTarget;
       var comboEl = document.getElementById('streak-combo-label');
       if (currentStreak >= 2) {
@@ -1003,7 +1253,8 @@ export function buildGoogleSitesScripts(
       if (flameSvg) {
         flameSvg.className.baseVal = 'w-4 h-4 ' + (currentStreak > 0 ? 'text-amber-400 anim-flame-dance' : 'text-slate-500');
       }
-      document.getElementById('streak-rule-label').textContent = 'Item tiap ' + streakTarget + ' benar' + (milestones.length ? ' · Debuff #' + milestones.join(', #') : '');
+      var rewardPrefix = enabledList.length === 1 ? (POWERUPS[enabledList[0]].name + ' tiap ' + streakTarget + ' benar') : ('Item tiap ' + streakTarget + ' benar');
+      document.getElementById('streak-rule-label').textContent = rewardPrefix + (showMs ? ' · Debuff #' + milestones.join(', #') : '');
 
       var segs = document.getElementById('streak-segments');
       segs.style.gridTemplateColumns = 'repeat(' + streakTarget + ', minmax(0, 1fr))';
@@ -1056,10 +1307,15 @@ export function buildGoogleSitesScripts(
       if (immuneQuestionsRemaining > 0) immuneQuestionsRemaining--;
 
       var qNum = currentQuestionIndex + 1;
-      var ms = getDebuffMilestones(playDeck.length);
-      if (ms.indexOf(qNum) !== -1 && awardedDebuffMilestones.indexOf(qNum) === -1) {
-        awardedDebuffMilestones.push(qNum);
-        grantPowerupToSlot(rollPowerup('debuff'), 'Bonus Soal #' + qNum);
+      if (isMilestoneDropActive()) {
+        var ms = getDebuffMilestones(playDeck.length);
+        if (ms.indexOf(qNum) !== -1 && awardedDebuffMilestones.indexOf(qNum) === -1) {
+          var rolledMs = rollPowerup('debuff');
+          if (rolledMs) {
+            awardedDebuffMilestones.push(qNum);
+            grantPowerupToSlot(rolledMs, 'Bonus Soal #' + qNum);
+          }
+        }
       }
 
       document.getElementById('quiz-progress-text').textContent = qNum + ' / ' + playDeck.length;
@@ -1104,11 +1360,12 @@ export function buildGoogleSitesScripts(
       if (btnQuizLb) btnQuizLb.classList.toggle('hidden', !settings.showLiveLeaderboardToPlayers);
 
       var optLen = (q.options || []).length;
-      var shouldShuffleOpts = (q.type === 'MC' || q.type === 'MS') && (glitchShuffleForNext || settings.shuffleOptions);
+      var canGlitch = isGamificationActive() && glitchShuffleForNext;
+      var shouldShuffleOpts = (q.type === 'MC' || q.type === 'MS') && (canGlitch || settings.shuffleOptions);
       currentOptionOrder = computeShuffledOrder(optLen, shouldShuffleOpts);
 
       var optContainer = document.getElementById('options-container');
-      if (glitchShuffleForNext && (q.type === 'MC' || q.type === 'MS')) {
+      if (canGlitch && (q.type === 'MC' || q.type === 'MS')) {
         glitchShuffleForNext = false;
         optContainer.classList.add('glitch-active');
         setTimeout(function() { optContainer.classList.remove('glitch-active'); }, 750);
@@ -1388,10 +1645,15 @@ export function buildGoogleSitesScripts(
 
       if (isCorrect) {
         correctCount++;
-        currentStreak++;
         score += earned;
-        if (currentStreak >= 2) playStreakComboFx(currentStreak);
-        else playCorrectFx();
+        if (isStreakRewardActive()) {
+          currentStreak++;
+          if (currentStreak >= 2) playStreakComboFx(currentStreak);
+          else playCorrectFx();
+        } else {
+          currentStreak = 0;
+          playCorrectFx();
+        }
 
         var pop = document.getElementById('score-pop-burst');
         if (pop && earned > 0) {
@@ -1401,10 +1663,13 @@ export function buildGoogleSitesScripts(
           pop.classList.add('anim-score-pop');
         }
 
-        var streakTarget = getStreakRewardTarget(playDeck.length);
-        if (currentStreak >= streakTarget) {
-          currentStreak = 0;
-          grantPowerupToSlot(rollPowerup(null), 'Streak ' + streakTarget + ' Benar');
+        if (isStreakRewardActive()) {
+          var streakTarget = getStreakRewardTarget(playDeck.length);
+          if (currentStreak >= streakTarget) {
+            currentStreak = 0;
+            var rolledSt = rollPowerup(null);
+            if (rolledSt) grantPowerupToSlot(rolledSt, 'Streak ' + streakTarget + ' Benar');
+          }
         }
       } else {
         playWrongFx();
@@ -1510,7 +1775,9 @@ export function buildGoogleSitesScripts(
 
       var kindIdx = island.islandIndex % 3;
       if (kindIdx === 0) {
-        desc.textContent = 'Pilih 1 dari 3 peti harta karun kuno untuk memperoleh Buff atau Debuff!';
+        desc.textContent = isGamificationActive()
+          ? 'Pilih 1 dari 3 peti harta karun kuno untuk memperoleh Buff atau Debuff!'
+          : 'Pilih 1 dari 3 peti harta karun kuno untuk memperoleh bonus poin pelayaran!';
         body.innerHTML = '<div class="grid grid-cols-3 gap-2.5">' +
           [0, 1, 2].map(function(idx) {
             return '<button type="button" onclick="resolveIslandMinigameReward(80)" class="arcade-btn bg-[#0B1120] hover:bg-amber-400/15 border border-[#23304C] hover:border-amber-400 rounded-xl p-4 flex flex-col items-center gap-1.5 cursor-pointer">' +
@@ -1557,14 +1824,15 @@ export function buildGoogleSitesScripts(
     }
     function resolveIslandMinigameReward(bonusPts) {
       playChestRewardFx();
-      var itemId = rollPowerup(null);
-      var spec = POWERUPS[itemId];
+      var gamActive = isGamificationActive();
+      var itemId = gamActive ? rollPowerup(null) : null;
+      var spec = itemId ? POWERUPS[itemId] : null;
       var body = document.getElementById('island-minigame-body');
       window._pendingIslandReward = { powerupId: itemId, bonusPoints: bonusPts };
       body.innerHTML = '<div class="bg-emerald-500/10 border border-emerald-400/40 rounded-xl p-4 space-y-2">' +
         '<div class="text-xs font-bold uppercase text-emerald-300">Harta Karun Ditemukan!</div>' +
-        '<div class="text-lg font-extrabold text-white">' + escapeHtml(spec.name) + '</div>' +
-        '<p class="text-xs text-slate-300">' + escapeHtml(spec.desc) + '</p>' +
+        '<div class="text-lg font-extrabold text-white">' + escapeHtml(spec ? spec.name : 'Harta Karun Ekspedisi') + '</div>' +
+        '<p class="text-xs text-slate-300">' + escapeHtml(spec ? spec.desc : 'Ekspedisi pulau berhasil! Bonus poin langsung ditambahkan ke skor pelayaranmu.') + '</p>' +
         '<div class="font-mono-num text-sm font-extrabold text-amber-300">+' + bonusPts + ' Poin Pelayaran</div>' +
       '</div>' +
       '<button type="button" onclick="claimIslandMinigameReward()" class="arcade-btn-amber w-full bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold py-3 rounded-xl cursor-pointer">Lanjutkan Berlayar</button>';
@@ -1572,18 +1840,23 @@ export function buildGoogleSitesScripts(
     function claimIslandMinigameReward() {
       playPopClickFx();
       clearInterval(helmAnimInterval);
-      var rew = window._pendingIslandReward || { powerupId: 'DOUBLE_SCORE', bonusPoints: 80 };
+      var rew = window._pendingIslandReward || { powerupId: null, bonusPoints: 80 };
       var docked = dockedIslandModal;
       if (docked && visitedIslands.indexOf(docked.islandNumber) === -1) visitedIslands.push(docked.islandNumber);
       dockedIslandModal = null;
       document.getElementById('modal-island-minigame').classList.add('hidden');
       score += rew.bonusPoints;
-      grantPowerupToSlot(rew.powerupId, 'Berlabuh di ' + (docked ? docked.name : 'Pulau'));
+      if (rew.powerupId && isGamificationActive()) {
+        grantPowerupToSlot(rew.powerupId, 'Berlabuh di ' + (docked ? docked.name : 'Pulau'));
+      } else {
+        showToast('Berlabuh di ' + (docked ? docked.name : 'Pulau') + ': +' + rew.bonusPoints + ' poin ekspedisi!');
+      }
       document.getElementById('current-score').textContent = String(score);
       advanceAfterQuestion();
     }
 
     function activatePowerup(slotIdx) {
+      if (!isGamificationActive()) return;
       if (powerupUsedThisQuestion || isFrozen || questionFeedbackShown || preCountdownValue !== null) return;
       var id = powerupInventory[slotIdx];
       var q = playDeck[currentQuestionIndex];
@@ -1645,7 +1918,7 @@ export function buildGoogleSitesScripts(
     }
 
     function triggerIncomingFreeze(attacker) {
-      if (activeScreen !== 'quiz') return;
+      if (activeScreen !== 'quiz' || !isGamificationActive()) return;
       if (immuneQuestionsRemaining > 0) {
         showToast('Perisai menangkis serangan ' + (attacker || 'lawan') + '!');
         return;
@@ -1677,7 +1950,7 @@ export function buildGoogleSitesScripts(
     }
 
     function triggerIncomingTornado(attacker) {
-      if (activeScreen !== 'quiz') return;
+      if (activeScreen !== 'quiz' || !isGamificationActive()) return;
       if (immuneQuestionsRemaining > 0) {
         showToast('Perisai menangkis badai dari ' + (attacker || 'lawan') + '!');
         return;
@@ -2046,12 +2319,12 @@ export function buildGoogleSitesScripts(
         document.getElementById('admin-pin-error').classList.remove('hidden');
       }
     }
-    function closeAdminDashboard() { showScreen('lobby'); updateLobbyUI(); }
+    function closeAdminDashboard() { roomGateUnlocked = true; showScreen('lobby'); updateLobbyUI(); }
 
     function switchAdminTab(tab) {
       playPopClickFx();
       adminTab = tab;
-      var tabs = ['session', 'stats', 'questions'];
+      var tabs = ['session', 'gamification', 'settings', 'stats', 'questions'];
       var activeCls = 'px-3.5 py-2 rounded-lg text-xs font-bold cursor-pointer whitespace-nowrap bg-amber-400 text-slate-950';
       var idleCls = 'px-3.5 py-2 rounded-lg text-xs font-bold cursor-pointer whitespace-nowrap text-slate-300 hover:text-white';
       for (var i = 0; i < tabs.length; i++) {
@@ -2065,6 +2338,8 @@ export function buildGoogleSitesScripts(
         if (panel) panel.classList.toggle('hidden', t !== tab);
       }
       if (tab === 'session') renderAdminSessionControls();
+      else if (tab === 'gamification') renderAdminGamificationControls();
+      else if (tab === 'settings') renderAdminSettingsControls();
       else if (tab === 'stats') renderAdminStats();
       else renderAdminBankSoal();
     }
@@ -2164,24 +2439,233 @@ export function buildGoogleSitesScripts(
 
       renderAdminLiveLeaderboard();
 
-      // Gameplay, Participation, Global Timer & Settings Controls
+      // Waiting list summary in Kontrol Sesi
+      var wTitle = document.getElementById('admin-waiting-title');
+      if (wTitle) wTitle.textContent = 'Peserta di Ruang Tunggu Live (' + waitingPlayers.length + ')';
+      var wBox = document.getElementById('admin-waiting-list');
+      if (wBox) {
+        wBox.innerHTML = waitingPlayers.length === 0
+          ? '<span class="text-xs text-slate-500">Belum ada peserta menunggu di lobby live.</span>'
+          : waitingPlayers.map(function(p) { return '<span class="px-2.5 py-1 rounded-md bg-[#131C31] border border-[#23304C] text-xs text-slate-200 font-semibold">' + escapeHtml(p.name) + (p.teamName ? (' · ' + escapeHtml(p.teamName)) : '') + '</span>'; }).join('');
+      }
+
+      renderAdminGamificationControls();
+      renderAdminSettingsControls();
+    }
+
+    function renderAdminGamificationControls() {
+      var gamActive = isGamificationActive();
       var gm = settings.gameplayMode || 'classic';
       var pm = settings.participationMode || 'either';
-      var durMins = Number(settings.quizDurationMinutes) || 0;
       var effectiveCount = (Number(settings.questionLimit) > 0 && Number(settings.questionLimit) < questions.length) ? Number(settings.questionLimit) : questions.length;
       var islandCount = buildVoyageCheckpoints(effectiveCount).length;
+
+      var swBtn = document.getElementById('setting-gamification-enabled');
+      var swBadge = document.getElementById('admin-gamification-status-badge');
+      var swDesc = document.getElementById('admin-gamification-status-desc');
+      var swTrack = document.getElementById('admin-gamification-switch-track');
+      var swText = document.getElementById('admin-gamification-switch-text');
+      if (swBtn) {
+        swBtn.setAttribute('aria-checked', gamActive ? 'true' : 'false');
+        swBtn.className = 'arcade-btn px-4 py-2.5 rounded-lg text-xs font-extrabold border inline-flex items-center gap-2.5 cursor-pointer shrink-0 whitespace-nowrap ' +
+          (gamActive ? 'bg-emerald-400 hover:bg-emerald-300 text-slate-950 border-emerald-300' : 'bg-[#131C31] hover:bg-slate-800 text-slate-200 border-[#23304C]');
+      }
+      if (swBadge) {
+        swBadge.textContent = gamActive ? 'Aktif' : 'Nonaktif';
+        swBadge.className = 'px-2 py-0.5 rounded-md text-[11px] font-extrabold border ' +
+          (gamActive ? 'bg-emerald-500/15 border-emerald-400/35 text-emerald-300' : 'bg-slate-800 border-slate-700 text-slate-400');
+      }
+      if (swDesc) {
+        swDesc.textContent = gamActive
+          ? 'Pemain mendapatkan Streak kombo, Buff (Skor 2x, 50:50, Perisai), serta Debuff serangan lawan (Bekukan #1, Acak Opsi, Puting Beliung) saat kuis berlangsung.'
+          : 'Mode kuis murni tanpa item Buff, Debuff, sabotase lawan, maupun pelacak Streak. Skor murni dihitung dari ketepatan jawaban dan kecepatan.';
+      }
+      if (swTrack) {
+        swTrack.className = 'w-8 h-4 rounded-full p-0.5 transition-colors inline-flex items-center ' + (gamActive ? 'bg-slate-950/30 justify-end' : 'bg-slate-700 justify-start');
+      }
+      if (swText) swText.textContent = gamActive ? 'Gamifikasi ON' : 'Gamifikasi OFF';
+
       var islandBadge = document.getElementById('admin-voyage-island-badge');
       if (islandBadge) islandBadge.textContent = islandCount + ' Pulau (' + effectiveCount + ' soal ÷ 5)';
+      var gmNote = document.getElementById('admin-gameplay-gamification-note');
+      if (gmNote) {
+        gmNote.textContent = gamActive
+          ? 'Pada mode Berlayar Harta Karun, setiap 5 soal kapal berlayar 3 langkah dan berlabuh di pulau minigame untuk meraih Buff atau Debuff.'
+          : 'Mode Berlayar Harta Karun tetap menampilkan peta pelayaran & pulau minigame, namun hadiah hanya berupa bonus poin tanpa Buff/Debuff.';
+      }
       var btnGmC = document.getElementById('btn-gameplay-classic');
       var btnGmV = document.getElementById('btn-gameplay-voyage');
       if (btnGmC && btnGmV) {
-        btnGmC.className = 'px-3 py-2 rounded-lg text-xs font-bold border cursor-pointer ' + (gm === 'classic' ? 'bg-amber-400 text-slate-950 border-amber-300' : 'bg-[#0B1120] text-slate-200 border-[#23304C]');
-        btnGmV.className = 'px-3 py-2 rounded-lg text-xs font-bold border cursor-pointer ' + (gm === 'voyage' ? 'bg-cyan-400 text-slate-950 border-cyan-300' : 'bg-[#0B1120] text-slate-200 border-[#23304C]');
+        btnGmC.className = 'px-3.5 py-2.5 rounded-lg text-xs font-bold border cursor-pointer ' + (gm === 'classic' ? 'bg-amber-400 text-slate-950 border-amber-300' : 'bg-[#131C31] text-slate-300 border-[#23304C]');
+        btnGmV.className = 'px-3.5 py-2.5 rounded-lg text-xs font-bold border cursor-pointer ' + (gm === 'voyage' ? 'bg-sky-400 text-slate-950 border-sky-300' : 'bg-[#131C31] text-slate-300 border-[#23304C]');
+      }
+      var isVoy = gm === 'voyage';
+      var partCard = document.getElementById('admin-part-card');
+      var partNote = document.getElementById('admin-part-scope-note');
+      var partDesc = document.getElementById('admin-part-desc');
+      if (partCard) partCard.className = 'bg-[#0B1120] border border-[#23304C] rounded-xl p-5 space-y-3 transition-opacity ' + (isVoy ? 'opacity-100' : 'opacity-65');
+      if (partNote) partNote.textContent = isVoy ? 'Aktif di Berlayar' : 'Khusus Mode Berlayar';
+      if (partDesc) {
+        partDesc.textContent = isVoy
+          ? 'Atur apakah pelaut boleh memilih bermain Solo atau Tim / Kru di halaman beranda.'
+          : 'Saat memakai Kuis Klasik, seluruh peserta otomatis bermain individu dan pilihan Solo / Tim disembunyikan dari beranda.';
       }
       ['either', 'solo', 'team'].forEach(function(pKey) {
         var b = document.getElementById('btn-part-mode-' + pKey);
-        if (b) b.className = 'px-2 py-1.5 rounded-lg text-[11px] font-bold border cursor-pointer ' + (pm === pKey ? 'bg-amber-400 text-slate-950 border-amber-300' : 'bg-[#0B1120] text-slate-200 border-[#23304C]');
+        if (b) {
+          b.disabled = !isVoy;
+          b.className = 'px-3 py-2.5 rounded-lg text-xs font-bold border ' +
+            (!isVoy
+              ? 'cursor-not-allowed opacity-60 bg-[#131C31] text-slate-400 border-[#23304C]'
+              : (pm === pKey ? 'cursor-pointer bg-emerald-400 text-slate-950 border-emerald-300' : 'cursor-pointer bg-[#131C31] text-slate-300 border-[#23304C]'));
+        }
       });
+
+      var confList = getConfiguredPowerups();
+      var streakOn = !(settings && settings.streakEnabled === false);
+      var msOn = !(settings && settings.milestoneDropsEnabled === false);
+      var hasDebuffs = confList.some(function(id) { return POWERUPS[id] && POWERUPS[id].kind === 'debuff'; });
+
+      var catTitle = document.getElementById('admin-gamification-catalog-title');
+      if (catTitle) catTitle.textContent = 'Pilih Fitur Buff & Debuff (' + confList.length + '/' + ALL_POWERUP_IDS.length + ' Aktif)';
+      var streakRule = document.getElementById('admin-gamification-streak-rule');
+      var debuffRule = document.getElementById('admin-gamification-debuff-rule');
+      var stTarget = getStreakRewardTarget(effectiveCount);
+      var dbMs = getDebuffMilestones(effectiveCount);
+      if (streakRule) streakRule.textContent = 'Streak: ' + (streakOn ? (stTarget + ' benar') : 'OFF');
+      if (debuffRule) debuffRule.textContent = 'Drop Debuff: ' + (msOn && hasDebuffs && dbMs.length ? ('#' + dbMs.join(', #')) : 'Nonaktif');
+
+      var mechRow = document.getElementById('admin-gamification-mechanics-row');
+      if (mechRow) mechRow.className = 'grid grid-cols-1 sm:grid-cols-2 gap-2.5 transition-opacity ' + (gamActive ? 'opacity-100' : 'opacity-50');
+      var stBtn = document.getElementById('setting-streak-enabled');
+      var stTitle = document.getElementById('setting-streak-title');
+      var stBadge = document.getElementById('setting-streak-badge');
+      if (stTitle) stTitle.textContent = 'Hadiah Streak Benar (' + stTarget + 'x)';
+      if (stBtn) {
+        stBtn.disabled = !gamActive;
+        stBtn.setAttribute('aria-checked', streakOn ? 'true' : 'false');
+        stBtn.className = 'p-3 rounded-xl border text-left flex items-center justify-between gap-3 transition-colors ' +
+          (!gamActive ? 'cursor-not-allowed bg-[#131C31] border-[#23304C]' : streakOn ? 'cursor-pointer bg-amber-400/10 border-amber-400/35' : 'cursor-pointer bg-[#131C31] border-[#23304C]');
+      }
+      if (stBadge) {
+        stBadge.textContent = streakOn ? 'ON' : 'OFF';
+        stBadge.className = 'px-2 py-0.5 rounded text-[11px] font-mono-num font-extrabold shrink-0 ' + (streakOn ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-800 text-slate-400');
+      }
+      var msBtn = document.getElementById('setting-milestone-drops-enabled');
+      var msDesc = document.getElementById('setting-milestone-desc');
+      var msBadge = document.getElementById('setting-milestone-badge');
+      if (msDesc) msDesc.textContent = hasDebuffs ? 'Beri Debuff acak di tengah kuis agar persaingan seru.' : 'Aktifkan minimal 1 item Debuff di bawah agar drop berjalan.';
+      if (msBtn) {
+        msBtn.disabled = !gamActive;
+        msBtn.setAttribute('aria-checked', msOn ? 'true' : 'false');
+        msBtn.className = 'p-3 rounded-xl border text-left flex items-center justify-between gap-3 transition-colors ' +
+          (!gamActive ? 'cursor-not-allowed bg-[#131C31] border-[#23304C]' : msOn ? 'cursor-pointer bg-sky-400/10 border-sky-400/35' : 'cursor-pointer bg-[#131C31] border-[#23304C]');
+      }
+      if (msBadge) {
+        msBadge.textContent = msOn ? 'ON' : 'OFF';
+        msBadge.className = 'px-2 py-0.5 rounded text-[11px] font-mono-num font-extrabold shrink-0 ' + (msOn && hasDebuffs ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-800 text-slate-400');
+      }
+
+      var presetMap = {
+        all: ALL_POWERUP_IDS,
+        buffs: ['DOUBLE_SCORE', 'FIFTY_FIFTY', 'SHIELD'],
+        double: ['DOUBLE_SCORE'],
+        none: []
+      };
+      var presetsWrap = document.getElementById('admin-gamification-presets');
+      if (presetsWrap) {
+        var pBtns = presetsWrap.querySelectorAll('[data-preset]');
+        for (var pi = 0; pi < pBtns.length; pi++) {
+          var pKey = pBtns[pi].getAttribute('data-preset');
+          var targetArr = presetMap[pKey] || [];
+          var isMatch = confList.length === targetArr.length && targetArr.every(function(x) { return confList.indexOf(x) !== -1; });
+          pBtns[pi].disabled = !gamActive;
+          pBtns[pi].className = 'px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors ' +
+            (!gamActive ? 'cursor-not-allowed opacity-50 bg-[#131C31] text-slate-400 border-[#23304C]' : isMatch ? 'cursor-pointer bg-amber-400 text-slate-950 border-amber-300' : 'cursor-pointer bg-[#131C31] hover:bg-slate-800 text-slate-200 border-[#23304C]');
+        }
+      }
+
+      var catGrid = document.getElementById('admin-gamification-catalog-grid');
+      if (catGrid) {
+        catGrid.className = 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 transition-opacity ' + (gamActive ? 'opacity-100' : 'opacity-50');
+        catGrid.innerHTML = ALL_POWERUP_IDS.map(function(key) {
+          var item = POWERUPS[key];
+          var isBuff = item.kind === 'buff';
+          var isItemOn = confList.indexOf(key) !== -1;
+          var cardCls = !gamActive
+            ? 'cursor-not-allowed bg-[#131C31] border-[#23304C]'
+            : isItemOn
+              ? (isBuff ? 'cursor-pointer bg-[#131C31] border-emerald-400/50 hover:border-emerald-300' : 'cursor-pointer bg-[#131C31] border-sky-400/50 hover:border-sky-300')
+              : 'cursor-pointer bg-[#0B1120] border-[#23304C] opacity-60 hover:opacity-85';
+          return '<button type="button" ' + (!gamActive ? 'disabled ' : '') + 'aria-pressed="' + (isItemOn ? 'true' : 'false') + '" onclick="adminTogglePowerupItem(\'' + key + '\')" class="rounded-xl p-3.5 border text-left flex items-start justify-between gap-2.5 transition-all ' + cardCls + '">' +
+            '<div class="flex items-start gap-3 min-w-0">' +
+              '<div class="w-8 h-8 rounded-lg bg-[#0B1120] border border-[#23304C] flex items-center justify-center shrink-0">' + getPowerupSvgHtml(key) + '</div>' +
+              '<div class="min-w-0">' +
+                '<div class="flex items-center gap-1.5 text-xs font-bold text-white"><span class="truncate">' + escapeHtml(item.name) + '</span><span class="text-slate-500">·</span><span class="' + (isBuff ? 'text-emerald-400' : 'text-sky-400') + '">' + (isBuff ? 'Buff' : 'Debuff') + '</span></div>' +
+                '<p class="text-[11px] text-slate-400 mt-1 leading-snug">' + escapeHtml(item.desc) + '</p>' +
+              '</div>' +
+            '</div>' +
+            '<span class="px-2 py-0.5 rounded text-[10px] font-mono-num font-extrabold shrink-0 ' + (isItemOn ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-800 text-slate-400') + '">' + (isItemOn ? 'ON' : 'OFF') + '</span>' +
+          '</button>';
+        }).join('');
+      }
+    }
+
+    function adminTogglePowerupItem(id) {
+      if (!isGamificationActive()) return;
+      playPopClickFx();
+      var cur = getConfiguredPowerups();
+      var nextList;
+      if (cur.indexOf(id) !== -1) {
+        nextList = cur.filter(function(x) { return x !== id; });
+      } else {
+        nextList = ALL_POWERUP_IDS.filter(function(x) { return x === id || cur.indexOf(x) !== -1; });
+      }
+      saveAndSyncSettings(Object.assign({}, settings, { enabledPowerups: nextList }));
+      renderAdminGamificationControls();
+      renderAdminSettingsControls();
+      showToast(nextList.indexOf(id) !== -1 ? (POWERUPS[id].name + ' dinyalakan.') : (POWERUPS[id].name + ' dimatikan.'));
+    }
+
+    function adminApplyPowerupPreset(preset) {
+      if (!isGamificationActive()) return;
+      playPopClickFx();
+      var list = ALL_POWERUP_IDS.slice();
+      var msg = 'Semua 6 item Buff & Debuff diaktifkan.';
+      if (preset === 'buffs') {
+        list = ['DOUBLE_SCORE', 'FIFTY_FIFTY', 'SHIELD'];
+        msg = 'Hanya item Buff (Skor 2x, 50:50, Perisai) yang diaktifkan.';
+      } else if (preset === 'double') {
+        list = ['DOUBLE_SCORE'];
+        msg = 'Hanya Buff Skor 2x yang dinyalakan.';
+      } else if (preset === 'none') {
+        list = [];
+        msg = 'Semua item Buff & Debuff dimatikan.';
+      }
+      saveAndSyncSettings(Object.assign({}, settings, { enabledPowerups: list }));
+      renderAdminGamificationControls();
+      renderAdminSettingsControls();
+      showToast(msg);
+    }
+
+    function adminToggleGamificationMechanic(key) {
+      if (!isGamificationActive()) return;
+      playPopClickFx();
+      var curVal = !(settings && settings[key] === false);
+      var patch = {};
+      patch[key] = !curVal;
+      saveAndSyncSettings(Object.assign({}, settings, patch));
+      renderAdminGamificationControls();
+      showToast(key === 'streakEnabled'
+        ? (!curVal ? 'Hadiah Streak jawaban benar diaktifkan.' : 'Hadiah Streak jawaban benar dimatikan.')
+        : (!curVal ? 'Drop Debuff otomatis diaktifkan.' : 'Drop Debuff otomatis dimatikan.'));
+    }
+
+    function renderAdminSettingsControls() {
+      var durMins = Number(settings.quizDurationMinutes) || 0;
+      var effectiveCount = (Number(settings.questionLimit) > 0 && Number(settings.questionLimit) < questions.length) ? Number(settings.questionLimit) : questions.length;
+      var islandCount = buildVoyageCheckpoints(effectiveCount).length;
+
       var timerBadge = document.getElementById('admin-timer-mode-badge');
       if (timerBadge) timerBadge.textContent = durMins > 0 ? (durMins + ' Menit Global') : 'Per-Soal';
       var durInp = document.getElementById('setting-quiz-duration');
@@ -2189,20 +2673,46 @@ export function buildGoogleSitesScripts(
       var liveLbChk = document.getElementById('setting-show-live-lb');
       if (liveLbChk) liveLbChk.checked = Boolean(settings.showLiveLeaderboardToPlayers);
 
-      document.getElementById('setting-allow-replay').checked = Boolean(settings.allowReplay);
-      document.getElementById('setting-shuffle-questions').checked = Boolean(settings.shuffleQuestions);
-      document.getElementById('setting-shuffle-options').checked = Boolean(settings.shuffleOptions);
-      document.getElementById('setting-compact-mode').checked = Boolean(settings.compactMode);
-      document.getElementById('setting-question-limit').value = String(settings.questionLimit || 0);
-      document.getElementById('setting-limit-hint').textContent = 'Isi 0 untuk memakai semua (' + questions.length + ') soal.';
-      document.getElementById('admin-change-pin-input').value = settings.adminPin || '6767';
+      var replayChk = document.getElementById('setting-allow-replay');
+      if (replayChk) replayChk.checked = Boolean(settings.allowReplay);
+      var shufQChk = document.getElementById('setting-shuffle-questions');
+      if (shufQChk) shufQChk.checked = Boolean(settings.shuffleQuestions);
+      var shufOChk = document.getElementById('setting-shuffle-options');
+      if (shufOChk) shufOChk.checked = Boolean(settings.shuffleOptions);
+      var compChk = document.getElementById('setting-compact-mode');
+      if (compChk) compChk.checked = Boolean(settings.compactMode);
+      var qLimInp = document.getElementById('setting-question-limit');
+      if (qLimInp) qLimInp.value = String(settings.questionLimit || 0);
+      var limHint = document.getElementById('setting-limit-hint');
+      if (limHint) limHint.textContent = 'Isi 0 untuk memakai semua (' + questions.length + ') soal.';
+      var pinInp = document.getElementById('admin-change-pin-input');
+      if (pinInp) pinInp.value = settings.adminPin || '6767';
 
-      // Waiting list summary
-      document.getElementById('admin-waiting-title').textContent = 'Peserta di Ruang Tunggu Live (' + waitingPlayers.length + ')';
-      var wBox = document.getElementById('admin-waiting-list');
-      wBox.innerHTML = waitingPlayers.length === 0
-        ? '<span class="text-xs text-slate-500">Belum ada peserta menunggu di lobby live.</span>'
-        : waitingPlayers.map(function(p) { return '<span class="px-2.5 py-1 rounded-md bg-[#131C31] border border-[#23304C] text-xs text-slate-200 font-semibold">' + escapeHtml(p.name) + (p.teamName ? (' · ' + escapeHtml(p.teamName)) : '') + '</span>'; }).join('');
+      var sumRoom = document.getElementById('admin-summary-room');
+      var sumGam = document.getElementById('admin-summary-gamification');
+      var sumPlay = document.getElementById('admin-summary-gameplay');
+      var sumTimer = document.getElementById('admin-summary-timer');
+      var sumDisp = document.getElementById('admin-summary-display');
+      if (sumRoom) sumRoom.textContent = activeRoomCode ? ('#' + activeRoomCode) : 'UMUM';
+      if (sumGam) {
+        var gActive = isGamificationActive();
+        var gCount = getEnabledPowerups().length;
+        sumGam.textContent = gActive ? ('Aktif (' + gCount + '/' + ALL_POWERUP_IDS.length + ' item)') : 'Nonaktif';
+        sumGam.className = 'font-mono-num font-bold ' + (gActive ? 'text-emerald-400' : 'text-slate-400');
+      }
+      if (sumPlay) sumPlay.textContent = settings.gameplayMode === 'voyage' ? ('Berlayar (' + islandCount + ' Pulau)') : 'Kuis Klasik';
+      if (sumTimer) sumTimer.textContent = durMins > 0 ? ('Global ' + durMins + ' Menit') : 'Per-Soal';
+      if (sumDisp) sumDisp.textContent = effectiveCount + ' Soal · ' + (settings.compactMode ? 'Ringkas' : 'Normal');
+    }
+
+    function adminToggleGamification() {
+      playPopClickFx();
+      var nextVal = !isGamificationActive();
+      var next = Object.assign({}, settings, { gamificationEnabled: nextVal });
+      saveAndSyncSettings(next);
+      renderAdminGamificationControls();
+      renderAdminSettingsControls();
+      showToast(nextVal ? 'Fitur Gamifikasi (Buff, Debuff & Streak) diaktifkan!' : 'Fitur Gamifikasi dimatikan (mode kuis murni).');
     }
 
     function switchAdminLbTab(tab) {
@@ -3039,7 +3549,7 @@ export function buildGoogleSitesScripts(
       if (activeScreen === 'admin') renderAdminSessionControls();
     };
     window.onCloudSabotage = function(ev) {
-      if (!ev || ev.targetDeviceId !== myDeviceId || activeScreen !== 'quiz') return;
+      if (!ev || ev.targetDeviceId !== myDeviceId || activeScreen !== 'quiz' || !isPowerupEnabled(ev.type)) return;
       if (ev.type === 'FREEZE_LEADER') triggerIncomingFreeze(ev.attackerName);
       else if (ev.type === 'TORNADO') triggerIncomingTornado(ev.attackerName);
       else if (ev.type === 'GLITCH_SHUFFLE') {
@@ -3063,6 +3573,9 @@ export function buildGoogleSitesScripts(
       var tmParam = (readUrlParam('team') || '').trim();
       if (tmParam) { teamModeChoice = 'team'; teamName = tmParam; }
       if (readUrlParam('live_lb') === '1') settings.showLiveLeaderboardToPlayers = true;
+      var gamParam = readUrlParam('gamification');
+      if (gamParam === '0') settings.gamificationEnabled = false;
+      else if (gamParam === '1') settings.gamificationEnabled = true;
       updateLobbyUI();
       startGameplay('Pemain Uji', 'free', 'autostart', true, true);
     } else {

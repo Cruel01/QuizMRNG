@@ -33,6 +33,10 @@ export interface QuizSettings {
   gameplayMode: GameplayMode;
   participationMode: ParticipationMode;
   showLiveLeaderboardToPlayers: boolean;
+  gamificationEnabled: boolean;
+  enabledPowerups?: PowerupId[];
+  streakEnabled?: boolean;
+  milestoneDropsEnabled?: boolean;
   updatedAt?: number;
 }
 

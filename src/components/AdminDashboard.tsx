@@ -10,6 +10,8 @@ import {
   DoorOpen,
   Download,
   FileSpreadsheet,
+  Flame,
+  Gamepad2,
   Hourglass,
   KeyRound,
   Lock,
@@ -17,16 +19,22 @@ import {
   Play,
   Plus,
   RotateCcw,
+  Scissors,
   Search,
+  Shield,
   Ship,
+  Shuffle,
   SlidersHorizontal,
+  Snowflake,
   Sparkles,
+  Tornado,
   Trash2,
   Trophy,
   Unlock,
   Upload,
   Users,
   X,
+  Zap,
 } from 'lucide-react';
 import {
   aggregateTeamLeaderboard,
@@ -37,12 +45,18 @@ import {
   filterQuestionsForAdmin,
   generateDefaultRoomCode,
   getCorrectAnswerDisplay,
+  getDebuffMilestones,
   getDynamicCategoryStats,
+  getEnabledPowerups,
   getSessionLockFlags,
+  getStreakRewardTarget,
+  isGamificationActive,
   mergeLiveAndFinishedLeaderboard,
   sanitizeImageUrl,
   sanitizeRoomCode,
+  togglePowerupInList,
 } from '../quiz/engine';
+import { ALL_POWERUP_IDS, POWERUP_CATALOG } from '../quiz/questions';
 import {
   buildQuestionCsvTemplate,
   exportQuestionsToCsv,
@@ -53,6 +67,7 @@ import { playPopClickFx } from '../quiz/soundFx';
 import type {
   ActivePlayer,
   PlayerRecord,
+  PowerupId,
   Question,
   QuestionType,
   QuizSettings,
@@ -60,7 +75,13 @@ import type {
   WaitingPlayer,
 } from '../quiz/types';
 
-type AdminTab = 'session' | 'stats' | 'questions' | 'googlesites';
+type AdminTab =
+  | 'session'
+  | 'gamification'
+  | 'settings'
+  | 'stats'
+  | 'questions'
+  | 'googlesites';
 
 interface AdminDashboardProps {
   questions: Question[];
@@ -241,6 +262,49 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     () => buildVoyageCheckpoints(effectiveDeckSize).length,
     [effectiveDeckSize]
   );
+
+  const gamificationActive = isGamificationActive(settings);
+  const configuredPowerups = useMemo(
+    () =>
+      Array.isArray(settings.enabledPowerups)
+        ? settings.enabledPowerups.filter((id) => id in POWERUP_CATALOG)
+        : ALL_POWERUP_IDS,
+    [settings.enabledPowerups]
+  );
+  const activePowerups = useMemo(
+    () => getEnabledPowerups(settings),
+    [settings]
+  );
+  const streakEnabledSetting = settings.streakEnabled !== false;
+  const milestoneDropsEnabledSetting = settings.milestoneDropsEnabled !== false;
+  const hasEnabledDebuffs = configuredPowerups.some(
+    (id) => POWERUP_CATALOG[id]?.kind === 'debuff'
+  );
+  const streakTargetPreview = useMemo(
+    () => getStreakRewardTarget(effectiveDeckSize),
+    [effectiveDeckSize]
+  );
+  const debuffMilestonesPreview = useMemo(
+    () => getDebuffMilestones(effectiveDeckSize),
+    [effectiveDeckSize]
+  );
+
+  const renderCatalogIcon = (id: PowerupId) => {
+    switch (id) {
+      case 'DOUBLE_SCORE':
+        return <Zap className="w-4 h-4 text-amber-300 shrink-0" />;
+      case 'FIFTY_FIFTY':
+        return <Scissors className="w-4 h-4 text-sky-300 shrink-0" />;
+      case 'SHIELD':
+        return <Shield className="w-4 h-4 text-emerald-300 shrink-0" />;
+      case 'FREEZE_LEADER':
+        return <Snowflake className="w-4 h-4 text-cyan-300 shrink-0" />;
+      case 'GLITCH_SHUFFLE':
+        return <Shuffle className="w-4 h-4 text-fuchsia-300 shrink-0" />;
+      case 'TORNADO':
+        return <Tornado className="w-4 h-4 text-rose-300 shrink-0" />;
+    }
+  };
 
   const googleSitesHtml = useMemo(
     () => generateGoogleSitesHtml(questions, settings, roomCode),
@@ -584,11 +648,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       <div
         role="tablist"
         aria-label="Menu Admin"
-        className="flex flex-wrap gap-1.5 p-1 bg-[#0B1120] border border-[#23304C] rounded-xl mb-6"
+        className="flex flex-nowrap overflow-x-auto sm:flex-wrap gap-1.5 p-1 bg-[#0B1120] border border-[#23304C] rounded-xl mb-6"
       >
         {(
           [
             { id: 'session', label: 'Kontrol Sesi' },
+            { id: 'gamification', label: 'Gamifikasi' },
+            { id: 'settings', label: 'Pengaturan & Tampilan' },
             { id: 'stats', label: `Statistik & Peserta (${sortedLeaderboard.length})` },
             { id: 'questions', label: `Bank Soal (${questions.length})` },
             { id: 'googlesites', label: 'Publish & Embed' },
@@ -878,52 +944,89 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           </div>
 
-          {/* Monitor Live Peserta Sedang Bermain */}
-          <div className="bg-[#0B1120] border border-[#23304C] rounded-xl p-5">
-            <div className="flex items-center justify-between gap-2 mb-3">
-              <div className="flex items-center gap-2">
-                <Activity className="w-4 h-4 text-emerald-400" />
-                <h3 className="text-sm font-bold text-white">
-                  Pantau Live: Sedang Mengerjakan ({freshActivePlayers.length})
-                </h3>
+          {/* Ruang Tunggu Live & Monitor Live (2 Kolom Seimbang) */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="bg-[#0B1120] border border-[#23304C] rounded-xl p-5">
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <div className="flex items-center gap-2">
+                  <Users className="w-4 h-4 text-amber-400" />
+                  <h3 className="text-sm font-bold text-white">
+                    Peserta di Ruang Tunggu Live ({waitingPlayers.length})
+                  </h3>
+                </div>
+                <span className="text-[11px] font-mono-num text-slate-400">
+                  Lobby Live
+                </span>
               </div>
-              <span className="text-[11px] text-slate-400">
-                Diperbarui otomatis setiap menjawab soal
-              </span>
+              <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pr-1">
+                {waitingPlayers.length === 0 ? (
+                  <p className="text-xs text-slate-500">
+                    Belum ada peserta menunggu di lobby live.
+                  </p>
+                ) : (
+                  waitingPlayers.map((p) => (
+                    <span
+                      key={p.deviceId}
+                      className="px-2.5 py-1 rounded-md bg-[#131C31] border border-[#23304C] text-xs text-slate-200 font-semibold"
+                    >
+                      {p.name}
+                      {p.teamName ? (
+                        <span className="ml-1 text-[11px] text-sky-300">
+                          ({p.teamName})
+                        </span>
+                      ) : null}
+                    </span>
+                  ))
+                )}
+              </div>
             </div>
 
-            {freshActivePlayers.length === 0 ? (
-              <p className="text-xs text-slate-500">
-                Belum ada peserta yang sedang aktif menjawab kuis saat ini.
-              </p>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-48 overflow-y-auto pr-1">
-                {freshActivePlayers.map((ap) => (
-                  <div
-                    key={ap.deviceId}
-                    className="bg-[#131C31] border border-[#23304C] rounded-lg px-3 py-2 flex items-center justify-between gap-2 text-xs"
-                  >
-                    <div className="min-w-0">
-                      <div className="font-bold text-white truncate">
-                        {ap.name}
-                        {ap.teamName ? (
-                          <span className="ml-1 text-[11px] text-sky-300">
-                            ({ap.teamName})
-                          </span>
-                        ) : null}
-                      </div>
-                      <div className="text-[11px] text-slate-400 font-mono-num">
-                        Soal {ap.currentQuestion || 1}/
-                        {ap.totalQuestions || questions.length}
-                      </div>
-                    </div>
-                    <div className="font-mono-num font-extrabold text-amber-400 shrink-0">
-                      {ap.score ?? 0}
-                    </div>
-                  </div>
-                ))}
+            <div className="bg-[#0B1120] border border-[#23304C] rounded-xl p-5">
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <div className="flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-emerald-400" />
+                  <h3 className="text-sm font-bold text-white">
+                    Pantau Live: Sedang Mengerjakan ({freshActivePlayers.length})
+                  </h3>
+                </div>
+                <span className="text-[11px] text-slate-400">
+                  Update tiap soal
+                </span>
               </div>
-            )}
+
+              {freshActivePlayers.length === 0 ? (
+                <p className="text-xs text-slate-500">
+                  Belum ada peserta yang sedang aktif menjawab kuis saat ini.
+                </p>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+                  {freshActivePlayers.map((ap) => (
+                    <div
+                      key={ap.deviceId}
+                      className="bg-[#131C31] border border-[#23304C] rounded-lg px-3 py-2 flex items-center justify-between gap-2 text-xs"
+                    >
+                      <div className="min-w-0">
+                        <div className="font-bold text-white truncate">
+                          {ap.name}
+                          {ap.teamName ? (
+                            <span className="ml-1 text-[11px] text-sky-300">
+                              ({ap.teamName})
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="text-[11px] text-slate-400 font-mono-num">
+                          Soal {ap.currentQuestion || 1}/
+                          {ap.totalQuestions || questions.length}
+                        </div>
+                      </div>
+                      <div className="font-mono-num font-extrabold text-amber-400 shrink-0">
+                        {ap.score ?? 0}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Klasemen Live di Panel Admin */}
@@ -972,7 +1075,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 Belum ada skor peserta yang tercatat di ruangan ini.
               </p>
             ) : adminLbTab === 'individual' ? (
-              <div className="divide-y divide-[#23304C]/70 max-h-52 overflow-y-auto rounded-lg border border-[#23304C] bg-[#131C31]">
+              <div className="divide-y divide-[#23304C]/70 max-h-56 overflow-y-auto rounded-lg border border-[#23304C] bg-[#131C31]">
                 {mergedAdminLeaderboard.map((row, idx) => (
                   <div
                     key={row.deviceId}
@@ -1013,7 +1116,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 ))}
               </div>
             ) : (
-              <div className="divide-y divide-[#23304C]/70 max-h-52 overflow-y-auto rounded-lg border border-[#23304C] bg-[#131C31]">
+              <div className="divide-y divide-[#23304C]/70 max-h-56 overflow-y-auto rounded-lg border border-[#23304C] bg-[#131C31]">
                 {teamAdminLeaderboard.map((t, idx) => (
                   <div
                     key={t.teamName}
@@ -1040,398 +1143,791 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             )}
           </div>
+        </div>
+      )}
 
-          {/* Pengaturan Kuis, Mode Latihan, Ruangan & PIN */}
+      {/* TAB 2: GAMIFIKASI */}
+      {activeTab === 'gamification' && (
+        <div className="space-y-5">
+          {/* Master Saklar Gamifikasi */}
+          <div className="bg-[#0B1120] border border-[#23304C] rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <Gamepad2 className="w-4 h-4 text-amber-400" />
+                <h3 className="text-base font-bold text-white">
+                  Aktifkan Fitur Gamifikasi
+                </h3>
+                <span
+                  className={`px-2 py-0.5 rounded-md text-[11px] font-extrabold border ${
+                    gamificationActive
+                      ? 'bg-emerald-500/15 border-emerald-400/35 text-emerald-300'
+                      : 'bg-slate-800 border-slate-700 text-slate-400'
+                  }`}
+                >
+                  {gamificationActive ? 'Aktif' : 'Nonaktif'}
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 leading-relaxed max-w-2xl">
+                {gamificationActive
+                  ? 'Pemain mendapatkan Streak kombo, Buff (Skor 2x, 50:50, Perisai), serta Debuff serangan lawan (Bekukan #1, Acak Opsi, Puting Beliung) saat kuis berlangsung.'
+                  : 'Mode kuis murni tanpa item Buff, Debuff, sabotase lawan, maupun pelacak Streak. Skor murni dihitung dari ketepatan jawaban dan kecepatan.'}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              role="switch"
+              aria-checked={gamificationActive}
+              aria-label="Aktifkan Fitur Gamifikasi"
+              onClick={() => {
+                playPopClickFx();
+                const nextEnabled = !gamificationActive;
+                onUpdateSettings({
+                  ...settings,
+                  gamificationEnabled: nextEnabled,
+                });
+                onNotify(
+                  nextEnabled
+                    ? 'Fitur Gamifikasi (Buff, Debuff & Streak) diaktifkan.'
+                    : 'Fitur Gamifikasi dimatikan (mode kuis murni).'
+                );
+              }}
+              className={`arcade-btn px-4 py-2.5 rounded-lg text-xs font-extrabold border inline-flex items-center gap-2.5 cursor-pointer shrink-0 whitespace-nowrap ${
+                gamificationActive
+                  ? 'bg-emerald-400 hover:bg-emerald-300 text-slate-950 border-emerald-300'
+                  : 'bg-[#131C31] hover:bg-slate-800 text-slate-200 border-[#23304C]'
+              }`}
+            >
+              <span
+                className={`w-8 h-4 rounded-full p-0.5 transition-colors inline-flex items-center ${
+                  gamificationActive
+                    ? 'bg-slate-950/30 justify-end'
+                    : 'bg-slate-700 justify-start'
+                }`}
+              >
+                <span className="w-3 h-3 rounded-full bg-white shadow" />
+              </span>
+              <span>{gamificationActive ? 'Gamifikasi ON' : 'Gamifikasi OFF'}</span>
+            </button>
+          </div>
+
+          {/* Mode Gameplay & Kepesertaan */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div className="bg-[#0B1120] border border-[#23304C] rounded-xl p-5 space-y-3">
-              <div className="flex items-center gap-2 text-sm font-bold text-white">
-                <SlidersHorizontal className="w-4 h-4 text-amber-400" />
-                <span>Pengaturan Kuis &amp; Tampilan</span>
-              </div>
-
-              {/* Mode Gameplay: Klasik vs Berlayar Mencari Harta Karun */}
-              <div className="p-3 rounded-lg bg-[#131C31] border border-[#23304C] space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="text-xs font-bold text-white inline-flex items-center gap-1.5">
-                    <Ship className="w-3.5 h-3.5 text-sky-400" />
-                    <span>Mode Gameplay</span>
-                  </div>
-                  <span className="text-[11px] font-mono-num text-sky-300">
-                    {previewIslandCount} Pulau ({effectiveDeckSize} soal ÷ 5)
-                  </span>
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-sm font-bold text-white inline-flex items-center gap-2">
+                  <Ship className="w-4 h-4 text-sky-400" />
+                  <span>Mode Gameplay</span>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <span className="text-[11px] font-mono-num text-sky-300">
+                  {previewIslandCount} Pulau ({effectiveDeckSize} soal ÷ 5)
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    playPopClickFx();
+                    onUpdateSettings({ ...settings, gameplayMode: 'classic' });
+                    onNotify('Mode gameplay diatur ke Kuis Klasik.');
+                  }}
+                  className={`px-3.5 py-2.5 rounded-lg text-xs font-bold border cursor-pointer ${
+                    settings.gameplayMode !== 'voyage'
+                      ? 'bg-amber-400 text-slate-950 border-amber-300'
+                      : 'bg-[#131C31] text-slate-300 border-[#23304C] hover:text-white'
+                  }`}
+                >
+                  Kuis Klasik
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    playPopClickFx();
+                    onUpdateSettings({ ...settings, gameplayMode: 'voyage' });
+                    onNotify('Mode gameplay diatur ke Berlayar Harta Karun.');
+                  }}
+                  className={`px-3.5 py-2.5 rounded-lg text-xs font-bold border cursor-pointer ${
+                    settings.gameplayMode === 'voyage'
+                      ? 'bg-sky-400 text-slate-950 border-sky-300'
+                      : 'bg-[#131C31] text-slate-300 border-[#23304C] hover:text-white'
+                  }`}
+                >
+                  Berlayar Harta Karun
+                </button>
+              </div>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                {gamificationActive
+                  ? 'Pada mode Berlayar Harta Karun, setiap 5 soal kapal berlayar 3 langkah dan berlabuh di pulau minigame untuk meraih Buff atau Debuff.'
+                  : 'Mode Berlayar Harta Karun tetap menampilkan peta pelayaran & pulau minigame, namun hadiah hanya berupa bonus poin tanpa Buff/Debuff.'}
+              </p>
+            </div>
+
+            <div
+              className={`bg-[#0B1120] border border-[#23304C] rounded-xl p-5 space-y-3 transition-opacity ${
+                settings.gameplayMode === 'voyage' ? 'opacity-100' : 'opacity-65'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-sm font-bold text-white inline-flex items-center gap-2">
+                  <Users className="w-4 h-4 text-emerald-400" />
+                  <span>Kepesertaan (Solo / Tim)</span>
+                </div>
+                <span className="text-[11px] font-mono-num text-slate-400">
+                  {settings.gameplayMode === 'voyage'
+                    ? 'Aktif di Berlayar'
+                    : 'Khusus Mode Berlayar'}
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {(
+                  [
+                    { id: 'either', label: 'Bebas' },
+                    { id: 'solo', label: 'Solo Saja' },
+                    { id: 'team', label: 'Tim Saja' },
+                  ] as const
+                ).map((opt) => (
                   <button
+                    key={opt.id}
+                    type="button"
+                    disabled={settings.gameplayMode !== 'voyage'}
+                    onClick={() => {
+                      playPopClickFx();
+                      onUpdateSettings({
+                        ...settings,
+                        participationMode: opt.id,
+                      });
+                    }}
+                    className={`px-3 py-2.5 rounded-lg text-xs font-bold border ${
+                      settings.gameplayMode !== 'voyage'
+                        ? 'cursor-not-allowed opacity-60 bg-[#131C31] text-slate-400 border-[#23304C]'
+                        : (settings.participationMode || 'either') === opt.id
+                          ? 'cursor-pointer bg-emerald-400 text-slate-950 border-emerald-300'
+                          : 'cursor-pointer bg-[#131C31] text-slate-300 border-[#23304C] hover:text-white'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                {settings.gameplayMode === 'voyage'
+                  ? 'Atur apakah pelaut boleh memilih bermain Solo atau Tim / Kru di halaman beranda.'
+                  : 'Saat memakai Kuis Klasik, seluruh peserta otomatis bermain individu dan pilihan Solo / Tim disembunyikan dari beranda.'}
+              </p>
+            </div>
+          </div>
+
+          {/* Ringkasan Mekanik & Pilih Fitur Gamifikasi */}
+          <div className="bg-[#0B1120] border border-[#23304C] rounded-xl p-5 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Flame className="w-4 h-4 text-amber-400" />
+                <h3 className="text-sm font-bold text-white">
+                  Pilih Fitur Buff &amp; Debuff ({configuredPowerups.length}/
+                  {ALL_POWERUP_IDS.length} Aktif)
+                </h3>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono-num">
+                <span className="px-2 py-0.5 rounded bg-[#131C31] border border-[#23304C] text-amber-300">
+                  Streak: {streakEnabledSetting ? `${streakTargetPreview} benar` : 'OFF'}
+                </span>
+                <span className="px-2 py-0.5 rounded bg-[#131C31] border border-[#23304C] text-sky-300">
+                  Drop Debuff:{' '}
+                  {milestoneDropsEnabledSetting &&
+                  hasEnabledDebuffs &&
+                  debuffMilestonesPreview.length > 0
+                    ? `#${debuffMilestonesPreview.join(', #')}`
+                    : 'Nonaktif'}
+                </span>
+              </div>
+            </div>
+
+            {/* Kontrol Mekanik Sumber Item */}
+            <div
+              className={`grid grid-cols-1 sm:grid-cols-2 gap-2.5 transition-opacity ${
+                gamificationActive ? 'opacity-100' : 'opacity-50'
+              }`}
+            >
+              <button
+                type="button"
+                role="switch"
+                aria-checked={streakEnabledSetting}
+                disabled={!gamificationActive}
+                onClick={() => {
+                  playPopClickFx();
+                  const nextVal = !streakEnabledSetting;
+                  onUpdateSettings({ ...settings, streakEnabled: nextVal });
+                  onNotify(
+                    nextVal
+                      ? 'Hadiah Streak jawaban benar diaktifkan.'
+                      : 'Hadiah Streak jawaban benar dimatikan.'
+                  );
+                }}
+                className={`p-3 rounded-xl border text-left flex items-center justify-between gap-3 transition-colors ${
+                  !gamificationActive
+                    ? 'cursor-not-allowed bg-[#131C31] border-[#23304C]'
+                    : streakEnabledSetting
+                      ? 'cursor-pointer bg-amber-400/10 border-amber-400/35 hover:border-amber-400/60'
+                      : 'cursor-pointer bg-[#131C31] border-[#23304C] hover:border-slate-500'
+                }`}
+              >
+                <div>
+                  <div className="text-xs font-bold text-white">
+                    Hadiah Streak Benar ({streakTargetPreview}x)
+                  </div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">
+                    Beri Buff/Debuff aktif setiap menjawab benar beruntun.
+                  </div>
+                </div>
+                <span
+                  className={`px-2 py-0.5 rounded text-[11px] font-mono-num font-extrabold shrink-0 ${
+                    streakEnabledSetting
+                      ? 'bg-emerald-500/20 text-emerald-300'
+                      : 'bg-slate-800 text-slate-400'
+                  }`}
+                >
+                  {streakEnabledSetting ? 'ON' : 'OFF'}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                role="switch"
+                aria-checked={milestoneDropsEnabledSetting}
+                disabled={!gamificationActive}
+                onClick={() => {
+                  playPopClickFx();
+                  const nextVal = !milestoneDropsEnabledSetting;
+                  onUpdateSettings({
+                    ...settings,
+                    milestoneDropsEnabled: nextVal,
+                  });
+                  onNotify(
+                    nextVal
+                      ? 'Drop Debuff otomatis di milestone soal diaktifkan.'
+                      : 'Drop Debuff otomatis di milestone soal dimatikan.'
+                  );
+                }}
+                className={`p-3 rounded-xl border text-left flex items-center justify-between gap-3 transition-colors ${
+                  !gamificationActive
+                    ? 'cursor-not-allowed bg-[#131C31] border-[#23304C]'
+                    : milestoneDropsEnabledSetting
+                      ? 'cursor-pointer bg-sky-400/10 border-sky-400/35 hover:border-sky-400/60'
+                      : 'cursor-pointer bg-[#131C31] border-[#23304C] hover:border-slate-500'
+                }`}
+              >
+                <div>
+                  <div className="text-xs font-bold text-white">
+                    Drop Debuff Milestone Soal
+                  </div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">
+                    {hasEnabledDebuffs
+                      ? 'Beri Debuff acak di tengah kuis agar persaingan seru.'
+                      : 'Aktifkan minimal 1 item Debuff di bawah agar drop berjalan.'}
+                  </div>
+                </div>
+                <span
+                  className={`px-2 py-0.5 rounded text-[11px] font-mono-num font-extrabold shrink-0 ${
+                    milestoneDropsEnabledSetting && hasEnabledDebuffs
+                      ? 'bg-emerald-500/20 text-emerald-300'
+                      : 'bg-slate-800 text-slate-400'
+                  }`}
+                >
+                  {milestoneDropsEnabledSetting ? 'ON' : 'OFF'}
+                </span>
+              </button>
+            </div>
+
+            {/* Preset Cepat Pilihan Item */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+              <span className="text-xs text-slate-400">
+                Klik item di bawah untuk menyalakan/mematikan satu per satu, atau
+                pilih cepat:
+              </span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {[
+                  {
+                    id: 'all',
+                    label: 'Semua (6)',
+                    list: [...ALL_POWERUP_IDS] as PowerupId[],
+                    msg: 'Semua 6 item Buff & Debuff diaktifkan.',
+                  },
+                  {
+                    id: 'buffs',
+                    label: 'Buff Saja',
+                    list: ['DOUBLE_SCORE', 'FIFTY_FIFTY', 'SHIELD'] as PowerupId[],
+                    msg: 'Hanya item Buff (Skor 2x, 50:50, Perisai) yang diaktifkan.',
+                  },
+                  {
+                    id: 'double',
+                    label: 'Hanya Skor 2x',
+                    list: ['DOUBLE_SCORE'] as PowerupId[],
+                    msg: 'Hanya Buff Skor 2x yang dinyalakan.',
+                  },
+                  {
+                    id: 'none',
+                    label: 'Kosongkan',
+                    list: [] as PowerupId[],
+                    msg: 'Semua item Buff & Debuff dimatikan.',
+                  },
+                ].map((preset) => {
+                  const isExactMatch =
+                    configuredPowerups.length === preset.list.length &&
+                    preset.list.every((pid) => configuredPowerups.includes(pid));
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      disabled={!gamificationActive}
+                      onClick={() => {
+                        playPopClickFx();
+                        onUpdateSettings({
+                          ...settings,
+                          enabledPowerups: preset.list,
+                        });
+                        onNotify(preset.msg);
+                      }}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors ${
+                        !gamificationActive
+                          ? 'cursor-not-allowed opacity-50 bg-[#131C31] text-slate-400 border-[#23304C]'
+                          : isExactMatch
+                            ? 'cursor-pointer bg-amber-400 text-slate-950 border-amber-300'
+                            : 'cursor-pointer bg-[#131C31] hover:bg-slate-800 text-slate-200 border-[#23304C]'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Grid Toggle Setiap Item Buff / Debuff */}
+            <div
+              className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 transition-opacity ${
+                gamificationActive ? 'opacity-100' : 'opacity-50'
+              }`}
+            >
+              {Object.values(POWERUP_CATALOG).map((item) => {
+                const isItemOn = configuredPowerups.includes(item.id);
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    aria-pressed={isItemOn}
+                    disabled={!gamificationActive}
+                    onClick={() => {
+                      playPopClickFx();
+                      const nextList = togglePowerupInList(
+                        configuredPowerups,
+                        item.id
+                      );
+                      onUpdateSettings({
+                        ...settings,
+                        enabledPowerups: nextList,
+                      });
+                      const turnedOn = nextList.includes(item.id);
+                      onNotify(
+                        turnedOn
+                          ? `${item.name} dinyalakan.`
+                          : `${item.name} dimatikan.`
+                      );
+                    }}
+                    className={`rounded-xl p-3.5 border text-left flex items-start justify-between gap-2.5 transition-all ${
+                      !gamificationActive
+                        ? 'cursor-not-allowed bg-[#131C31] border-[#23304C]'
+                        : isItemOn
+                          ? item.kind === 'buff'
+                            ? 'cursor-pointer bg-[#131C31] border-emerald-400/50 hover:border-emerald-300'
+                            : 'cursor-pointer bg-[#131C31] border-sky-400/50 hover:border-sky-300'
+                          : 'cursor-pointer bg-[#0B1120] border-[#23304C] opacity-60 hover:opacity-85'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3 min-w-0">
+                      <div className="w-8 h-8 rounded-lg bg-[#0B1120] border border-[#23304C] flex items-center justify-center shrink-0">
+                        {renderCatalogIcon(item.id)}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-white">
+                          <span className="truncate">{item.name}</span>
+                          <span className="text-slate-500" aria-hidden="true">
+                            ·
+                          </span>
+                          <span
+                            className={
+                              item.kind === 'buff'
+                                ? 'text-emerald-400'
+                                : 'text-sky-400'
+                            }
+                          >
+                            {item.kind === 'buff' ? 'Buff' : 'Debuff'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 mt-1 leading-snug">
+                          {item.desc}
+                        </p>
+                      </div>
+                    </div>
+
+                    <span
+                      className={`px-2 py-0.5 rounded text-[10px] font-mono-num font-extrabold shrink-0 ${
+                        isItemOn
+                          ? 'bg-emerald-500/20 text-emerald-300'
+                          : 'bg-slate-800 text-slate-400'
+                      }`}
+                    >
+                      {isItemOn ? 'ON' : 'OFF'}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: PENGATURAN & TAMPILAN */}
+      {activeTab === 'settings' && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Kolom Kiri: Pengaturan Waktu, Soal & Tampilan */}
+          <div className="bg-[#0B1120] border border-[#23304C] rounded-xl p-5 space-y-3">
+            <div className="flex items-center gap-2 text-sm font-bold text-white">
+              <SlidersHorizontal className="w-4 h-4 text-amber-400" />
+              <span>Pengaturan Kuis, Timer &amp; Tampilan</span>
+            </div>
+
+            {/* Timer Kuis Global (Menit) */}
+            <div className="p-3 rounded-lg bg-[#131C31] border border-[#23304C] space-y-2.5">
+              <div>
+                <label
+                  htmlFor="admin-quiz-duration"
+                  className="text-xs font-bold text-white inline-flex items-center gap-1.5"
+                >
+                  <Clock className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Timer Kuis Global (Menit)</span>
+                </label>
+                <span className="block text-[11px] text-slate-400 mt-0.5">
+                  Isi &gt; 0 (mis. 30 menit) untuk mematikan timer per-soal dan
+                  memakai 1 timer kuis gabungan.
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {[0, 15, 30, 45, 60].map((preset) => (
+                  <button
+                    key={preset}
                     type="button"
                     onClick={() => {
                       playPopClickFx();
-                      onUpdateSettings({ ...settings, gameplayMode: 'classic' });
+                      setDurationDraft(String(preset));
+                      onUpdateSettings({
+                        ...settings,
+                        quizDurationMinutes: preset,
+                      });
+                      onNotify(
+                        preset === 0
+                          ? 'Timer dikembalikan ke hitungan per-soal.'
+                          : `Timer kuis global diatur ke ${preset} menit.`
+                      );
                     }}
-                    className={`px-3 py-2 rounded-lg text-xs font-bold border cursor-pointer ${
-                      settings.gameplayMode !== 'voyage'
+                    className={`px-2.5 py-1 rounded text-[11px] font-mono-num font-bold border cursor-pointer ${
+                      Number(settings.quizDurationMinutes || 0) === preset
                         ? 'bg-amber-400 text-slate-950 border-amber-300'
                         : 'bg-[#0B1120] text-slate-300 border-[#23304C] hover:text-white'
                     }`}
                   >
-                    Kuis Klasik
+                    {preset === 0 ? 'Per-Soal' : `${preset}m`}
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      playPopClickFx();
-                      onUpdateSettings({ ...settings, gameplayMode: 'voyage' });
-                    }}
-                    className={`px-3 py-2 rounded-lg text-xs font-bold border cursor-pointer ${
-                      settings.gameplayMode === 'voyage'
-                        ? 'bg-sky-400 text-slate-950 border-sky-300'
-                        : 'bg-[#0B1120] text-slate-300 border-[#23304C] hover:text-white'
-                    }`}
-                  >
-                    Berlayar Harta Karun
-                  </button>
-                </div>
-                <p className="text-[11px] text-slate-400 leading-snug">
-                  Tiap 5 soal kapal maju 3 langkah &amp; berlabuh di pulau minigame
-                  untuk meraih Buff atau Debuff Puting Beliung.
-                </p>
-              </div>
-
-              {/* Kepesertaan Solo vs Tim */}
-              <div className="p-3 rounded-lg bg-[#131C31] border border-[#23304C] space-y-2">
-                <div className="text-xs font-bold text-white inline-flex items-center gap-1.5">
-                  <Users className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Kepesertaan (Solo / Tim)</span>
-                </div>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {(
-                    [
-                      { id: 'either', label: 'Bebas' },
-                      { id: 'solo', label: 'Solo Saja' },
-                      { id: 'team', label: 'Tim Saja' },
-                    ] as const
-                  ).map((opt) => (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => {
-                        playPopClickFx();
-                        onUpdateSettings({
-                          ...settings,
-                          participationMode: opt.id,
-                        });
-                      }}
-                      className={`px-2 py-1.5 rounded-lg text-[11px] font-bold border cursor-pointer ${
-                        (settings.participationMode || 'either') === opt.id
-                          ? 'bg-emerald-400 text-slate-950 border-emerald-300'
-                          : 'bg-[#0B1120] text-slate-300 border-[#23304C] hover:text-white'
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Timer Kuis Global (Menit) */}
-              <div className="p-3 rounded-lg bg-[#131C31] border border-[#23304C] space-y-2.5">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <label
-                      htmlFor="admin-quiz-duration"
-                      className="text-xs font-bold text-white inline-flex items-center gap-1.5"
-                    >
-                      <Clock className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Timer Kuis Global (Menit)</span>
-                    </label>
-                    <span className="block text-[11px] text-slate-400 mt-0.5">
-                      Isi &gt; 0 (mis. 30 menit) untuk mematikan timer per-soal
-                      dan memakai 1 timer kuis gabungan.
-                    </span>
-                  </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {[0, 15, 30, 45, 60].map((preset) => (
-                    <button
-                      key={preset}
-                      type="button"
-                      onClick={() => {
-                        playPopClickFx();
-                        setDurationDraft(String(preset));
-                        onUpdateSettings({
-                          ...settings,
-                          quizDurationMinutes: preset,
-                        });
-                        onNotify(
-                          preset === 0
-                            ? 'Timer dikembalikan ke hitungan per-soal.'
-                            : `Timer kuis global diatur ke ${preset} menit.`
-                        );
-                      }}
-                      className={`px-2.5 py-1 rounded text-[11px] font-mono-num font-bold border cursor-pointer ${
-                        Number(settings.quizDurationMinutes || 0) === preset
-                          ? 'bg-amber-400 text-slate-950 border-amber-300'
-                          : 'bg-[#0B1120] text-slate-300 border-[#23304C] hover:text-white'
-                      }`}
-                    >
-                      {preset === 0 ? 'Per-Soal' : `${preset}m`}
-                    </button>
-                  ))}
-                  <div className="flex items-center gap-1 ml-auto">
-                    <input
-                      id="admin-quiz-duration"
-                      type="number"
-                      min={0}
-                      max={180}
-                      value={durationDraft}
-                      onChange={(e) => setDurationDraft(e.target.value)}
-                      className="w-14 px-2 py-1 rounded bg-[#0B1120] border border-[#23304C] text-white text-xs font-mono-num font-bold text-center"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playPopClickFx();
-                        const val = Math.max(
-                          0,
-                          Math.min(180, Math.floor(Number(durationDraft) || 0))
-                        );
-                        setDurationDraft(String(val));
-                        onUpdateSettings({
-                          ...settings,
-                          quizDurationMinutes: val,
-                        });
-                        onNotify(
-                          val === 0
-                            ? 'Timer dikembalikan ke hitungan per-soal.'
-                            : `Timer kuis global diatur ke ${val} menit.`
-                        );
-                      }}
-                      className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-[11px] px-2.5 py-1 rounded cursor-pointer"
-                    >
-                      Set
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <label className="flex items-start justify-between gap-3 cursor-pointer p-2.5 rounded-lg bg-[#131C31] border border-[#23304C]">
-                <div>
-                  <div className="text-xs font-bold text-white">
-                    Tampilkan Leaderboard Live ke Pemain
-                  </div>
-                  <div className="text-[11px] text-slate-400">
-                    Izinkan peserta melihat klasemen sementara di Lobby &amp;
-                    saat kuis berlangsung.
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={Boolean(settings.showLiveLeaderboardToPlayers)}
-                  onChange={(e) => {
-                    playPopClickFx();
-                    onUpdateSettings({
-                      ...settings,
-                      showLiveLeaderboardToPlayers: e.target.checked,
-                    });
-                  }}
-                  className="mt-1 accent-amber-400 w-4 h-4 cursor-pointer"
-                />
-              </label>
-
-              <label className="flex items-start justify-between gap-3 cursor-pointer p-2.5 rounded-lg bg-[#131C31] border border-[#23304C]">
-                <div>
-                  <div className="text-xs font-bold text-white">
-                    Mode Latihan (Boleh Main Ulang)
-                  </div>
-                  <div className="text-[11px] text-slate-400">
-                    Buka kunci 1x per perangkat agar peserta bisa mengulang kuis.
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={settings.allowReplay}
-                  onChange={(e) => {
-                    playPopClickFx();
-                    onUpdateSettings({ ...settings, allowReplay: e.target.checked });
-                  }}
-                  className="mt-1 accent-amber-400 w-4 h-4 cursor-pointer"
-                />
-              </label>
-
-              <label className="flex items-start justify-between gap-3 cursor-pointer p-2.5 rounded-lg bg-[#131C31] border border-[#23304C]">
-                <div>
-                  <div className="text-xs font-bold text-white">
-                    Acak Urutan Soal per Pemain
-                  </div>
-                  <div className="text-[11px] text-slate-400">
-                    Mencegah saling contek urutan nomor antar peserta.
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={settings.shuffleQuestions}
-                  onChange={(e) => {
-                    playPopClickFx();
-                    onUpdateSettings({
-                      ...settings,
-                      shuffleQuestions: e.target.checked,
-                    });
-                  }}
-                  className="mt-1 accent-amber-400 w-4 h-4 cursor-pointer"
-                />
-              </label>
-
-              <label className="flex items-start justify-between gap-3 cursor-pointer p-2.5 rounded-lg bg-[#131C31] border border-[#23304C]">
-                <div>
-                  <div className="text-xs font-bold text-white">
-                    Acak Posisi Opsi A–D
-                  </div>
-                  <div className="text-[11px] text-slate-400">
-                    Posisi opsi pilihan ganda &amp; multi-pilih diacak otomatis.
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={settings.shuffleOptions}
-                  onChange={(e) => {
-                    playPopClickFx();
-                    onUpdateSettings({
-                      ...settings,
-                      shuffleOptions: e.target.checked,
-                    });
-                  }}
-                  className="mt-1 accent-amber-400 w-4 h-4 cursor-pointer"
-                />
-              </label>
-
-              <label className="flex items-start justify-between gap-3 cursor-pointer p-2.5 rounded-lg bg-[#131C31] border border-[#23304C]">
-                <div>
-                  <div className="text-xs font-bold text-white">
-                    Mode Ringkas (Embed Google Sites)
-                  </div>
-                  <div className="text-[11px] text-slate-400">
-                    Menghemat padding vertikal untuk bingkai situs sempit.
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={settings.compactMode}
-                  onChange={(e) => {
-                    playPopClickFx();
-                    onUpdateSettings({
-                      ...settings,
-                      compactMode: e.target.checked,
-                    });
-                  }}
-                  className="mt-1 accent-amber-400 w-4 h-4 cursor-pointer"
-                />
-              </label>
-
-              <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-[#131C31] border border-[#23304C]">
-                <div>
-                  <label
-                    htmlFor="admin-q-limit"
-                    className="text-xs font-bold text-white block"
-                  >
-                    Batas Jumlah Soal / Sesi
-                  </label>
-                  <span className="text-[11px] text-slate-400">
-                    Isi 0 untuk memakai semua ({questions.length}) soal.
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5">
+                ))}
+                <div className="flex items-center gap-1 ml-auto">
                   <input
-                    id="admin-q-limit"
+                    id="admin-quiz-duration"
                     type="number"
                     min={0}
-                    max={200}
-                    value={limitDraft}
-                    onChange={(e) => setLimitDraft(e.target.value)}
-                    className="w-16 px-2.5 py-1.5 rounded bg-[#0B1120] border border-[#23304C] text-white text-xs font-mono-num font-bold text-center"
+                    max={180}
+                    value={durationDraft}
+                    onChange={(e) => setDurationDraft(e.target.value)}
+                    className="w-14 px-2 py-1 rounded bg-[#0B1120] border border-[#23304C] text-white text-xs font-mono-num font-bold text-center"
                   />
                   <button
                     type="button"
                     onClick={() => {
                       playPopClickFx();
-                      const val = Math.max(0, Math.floor(Number(limitDraft) || 0));
-                      setLimitDraft(String(val));
-                      onUpdateSettings({ ...settings, questionLimit: val });
-                      onNotify('Batas jumlah soal disimpan.');
+                      const val = Math.max(
+                        0,
+                        Math.min(180, Math.floor(Number(durationDraft) || 0))
+                      );
+                      setDurationDraft(String(val));
+                      onUpdateSettings({
+                        ...settings,
+                        quizDurationMinutes: val,
+                      });
+                      onNotify(
+                        val === 0
+                          ? 'Timer dikembalikan ke hitungan per-soal.'
+                          : `Timer kuis global diatur ke ${val} menit.`
+                      );
                     }}
-                    className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-xs px-3 py-1.5 rounded cursor-pointer"
+                    className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-[11px] px-2.5 py-1 rounded cursor-pointer"
                   >
-                    Terapkan
+                    Set
                   </button>
                 </div>
               </div>
             </div>
 
-            <div className="space-y-4">
-              {/* Ubah PIN Admin */}
-              <div className="bg-[#0B1120] border border-[#23304C] rounded-xl p-5 space-y-3">
-                <div className="flex items-center gap-2 text-sm font-bold text-white">
-                  <KeyRound className="w-4 h-4 text-amber-400" />
-                  <span>Ubah PIN Admin</span>
+            <label className="flex items-start justify-between gap-3 cursor-pointer p-2.5 rounded-lg bg-[#131C31] border border-[#23304C]">
+              <div>
+                <div className="text-xs font-bold text-white">
+                  Tampilkan Leaderboard Live ke Pemain
                 </div>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    aria-label="PIN Admin Baru"
-                    value={pinDraft}
-                    onChange={(e) => setPinDraft(e.target.value)}
-                    maxLength={10}
-                    placeholder="Minimal 4 karakter"
-                    className="flex-1 px-3 py-2 rounded-lg bg-[#131C31] border border-[#23304C] text-white font-mono-num font-bold text-xs tracking-widest"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      playPopClickFx();
-                      handleSavePin();
-                    }}
-                    className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-xs px-4 py-2 rounded-lg cursor-pointer"
-                  >
-                    Simpan PIN
-                  </button>
+                <div className="text-[11px] text-slate-400">
+                  Izinkan peserta melihat klasemen sementara di Lobby &amp; saat
+                  kuis berlangsung.
                 </div>
               </div>
+              <input
+                type="checkbox"
+                checked={Boolean(settings.showLiveLeaderboardToPlayers)}
+                onChange={(e) => {
+                  playPopClickFx();
+                  onUpdateSettings({
+                    ...settings,
+                    showLiveLeaderboardToPlayers: e.target.checked,
+                  });
+                }}
+                className="mt-1 accent-amber-400 w-4 h-4 cursor-pointer"
+              />
+            </label>
 
-              {/* Waiting Room Summary & Reset Default */}
-              <div className="bg-[#0B1120] border border-[#23304C] rounded-xl p-5 space-y-3">
-                <div>
-                  <div className="text-sm font-bold text-white">
-                    Peserta di Ruang Tunggu Live ({waitingPlayers.length})
-                  </div>
-                  <div className="flex flex-wrap gap-1.5 mt-2">
-                    {waitingPlayers.length === 0 ? (
-                      <span className="text-xs text-slate-500">
-                        Belum ada peserta menunggu di lobby live.
-                      </span>
-                    ) : (
-                      waitingPlayers.map((p) => (
-                        <span
-                          key={p.deviceId}
-                          className="px-2.5 py-1 rounded-md bg-[#131C31] border border-[#23304C] text-xs text-slate-200 font-semibold"
-                        >
-                          {p.name}
-                        </span>
-                      ))
-                    )}
-                  </div>
+            <label className="flex items-start justify-between gap-3 cursor-pointer p-2.5 rounded-lg bg-[#131C31] border border-[#23304C]">
+              <div>
+                <div className="text-xs font-bold text-white">
+                  Mode Latihan (Boleh Main Ulang)
                 </div>
-
-                <div className="pt-2 border-t border-[#23304C]">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      playPopClickFx();
-                      onResetDefaultQuestions();
-                    }}
-                    className="w-full bg-[#131C31] hover:bg-slate-800 text-amber-300 border border-[#23304C] font-bold text-xs px-4 py-2.5 rounded-lg inline-flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" /> Muat Ulang 30 Soal Default
-                  </button>
+                <div className="text-[11px] text-slate-400">
+                  Buka kunci 1x per perangkat agar peserta bisa mengulang kuis.
                 </div>
               </div>
+              <input
+                type="checkbox"
+                checked={settings.allowReplay}
+                onChange={(e) => {
+                  playPopClickFx();
+                  onUpdateSettings({ ...settings, allowReplay: e.target.checked });
+                }}
+                className="mt-1 accent-amber-400 w-4 h-4 cursor-pointer"
+              />
+            </label>
+
+            <label className="flex items-start justify-between gap-3 cursor-pointer p-2.5 rounded-lg bg-[#131C31] border border-[#23304C]">
+              <div>
+                <div className="text-xs font-bold text-white">
+                  Acak Urutan Soal per Pemain
+                </div>
+                <div className="text-[11px] text-slate-400">
+                  Mencegah saling contek urutan nomor antar peserta.
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={settings.shuffleQuestions}
+                onChange={(e) => {
+                  playPopClickFx();
+                  onUpdateSettings({
+                    ...settings,
+                    shuffleQuestions: e.target.checked,
+                  });
+                }}
+                className="mt-1 accent-amber-400 w-4 h-4 cursor-pointer"
+              />
+            </label>
+
+            <label className="flex items-start justify-between gap-3 cursor-pointer p-2.5 rounded-lg bg-[#131C31] border border-[#23304C]">
+              <div>
+                <div className="text-xs font-bold text-white">
+                  Acak Posisi Opsi A–D
+                </div>
+                <div className="text-[11px] text-slate-400">
+                  Posisi opsi pilihan ganda &amp; multi-pilih diacak otomatis.
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={settings.shuffleOptions}
+                onChange={(e) => {
+                  playPopClickFx();
+                  onUpdateSettings({
+                    ...settings,
+                    shuffleOptions: e.target.checked,
+                  });
+                }}
+                className="mt-1 accent-amber-400 w-4 h-4 cursor-pointer"
+              />
+            </label>
+
+            <label className="flex items-start justify-between gap-3 cursor-pointer p-2.5 rounded-lg bg-[#131C31] border border-[#23304C]">
+              <div>
+                <div className="text-xs font-bold text-white">
+                  Mode Ringkas (Embed Google Sites)
+                </div>
+                <div className="text-[11px] text-slate-400">
+                  Menghemat padding vertikal untuk bingkai situs sempit.
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={settings.compactMode}
+                onChange={(e) => {
+                  playPopClickFx();
+                  onUpdateSettings({
+                    ...settings,
+                    compactMode: e.target.checked,
+                  });
+                }}
+                className="mt-1 accent-amber-400 w-4 h-4 cursor-pointer"
+              />
+            </label>
+
+            <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-[#131C31] border border-[#23304C]">
+              <div>
+                <label
+                  htmlFor="admin-q-limit"
+                  className="text-xs font-bold text-white block"
+                >
+                  Batas Jumlah Soal / Sesi
+                </label>
+                <span className="text-[11px] text-slate-400">
+                  Isi 0 untuk memakai semua ({questions.length}) soal.
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <input
+                  id="admin-q-limit"
+                  type="number"
+                  min={0}
+                  max={200}
+                  value={limitDraft}
+                  onChange={(e) => setLimitDraft(e.target.value)}
+                  className="w-16 px-2.5 py-1.5 rounded bg-[#0B1120] border border-[#23304C] text-white text-xs font-mono-num font-bold text-center"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    playPopClickFx();
+                    const val = Math.max(0, Math.floor(Number(limitDraft) || 0));
+                    setLimitDraft(String(val));
+                    onUpdateSettings({ ...settings, questionLimit: val });
+                    onNotify('Batas jumlah soal disimpan.');
+                  }}
+                  className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-xs px-3 py-1.5 rounded cursor-pointer"
+                >
+                  Terapkan
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Kolom Kanan: Keamanan Admin, Bank Default & Ringkasan */}
+          <div className="space-y-4">
+            <div className="bg-[#0B1120] border border-[#23304C] rounded-xl p-5 space-y-3">
+              <div className="flex items-center gap-2 text-sm font-bold text-white">
+                <KeyRound className="w-4 h-4 text-amber-400" />
+                <span>Ubah PIN Admin</span>
+              </div>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                PIN ini digunakan untuk membuka Panel Penyelenggara di ruangan
+                aktif saat ini.
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  aria-label="PIN Admin Baru"
+                  value={pinDraft}
+                  onChange={(e) => setPinDraft(e.target.value)}
+                  maxLength={10}
+                  placeholder="Minimal 4 karakter"
+                  className="flex-1 px-3 py-2 rounded-lg bg-[#131C31] border border-[#23304C] text-white font-mono-num font-bold text-xs tracking-widest"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    playPopClickFx();
+                    handleSavePin();
+                  }}
+                  className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-xs px-4 py-2 rounded-lg cursor-pointer whitespace-nowrap"
+                >
+                  Simpan PIN
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-[#0B1120] border border-[#23304C] rounded-xl p-5 space-y-3">
+              <div className="text-sm font-bold text-white">
+                Pemulihan Bank Soal Bawaan
+              </div>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Kembalikan daftar soal pada ruangan aktif menjadi 30 soal trivia
+                Nusantara bawaan apabila ingin memulai ulang materi.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  playPopClickFx();
+                  onResetDefaultQuestions();
+                }}
+                className="w-full bg-[#131C31] hover:bg-slate-800 text-amber-300 border border-[#23304C] font-bold text-xs px-4 py-2.5 rounded-lg inline-flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
+              >
+                <RotateCcw className="w-3.5 h-3.5" /> Muat Ulang 30 Soal Default
+              </button>
+            </div>
+
+            <div className="bg-[#0B1120] border border-[#23304C] rounded-xl p-5 space-y-2.5">
+              <div className="text-sm font-bold text-white">
+                Ringkasan Konfigurasi Aktif
+              </div>
+              <dl className="divide-y divide-[#23304C]/70 text-xs">
+                <div className="py-2 flex items-center justify-between gap-2">
+                  <dt className="text-slate-400">Ruang Aktif</dt>
+                  <dd className="font-mono-num font-bold text-sky-300">
+                    {roomCode ? `#${roomCode}` : 'UMUM'}
+                  </dd>
+                </div>
+                <div className="py-2 flex items-center justify-between gap-2">
+                  <dt className="text-slate-400">Fitur Gamifikasi</dt>
+                  <dd
+                    className={`font-mono-num font-bold ${
+                      gamificationActive ? 'text-emerald-400' : 'text-slate-400'
+                    }`}
+                  >
+                    {gamificationActive
+                      ? `Aktif (${activePowerups.length}/${ALL_POWERUP_IDS.length} item)`
+                      : 'Nonaktif'}
+                  </dd>
+                </div>
+                <div className="py-2 flex items-center justify-between gap-2">
+                  <dt className="text-slate-400">Mode Gameplay</dt>
+                  <dd className="font-mono-num font-bold text-white">
+                    {settings.gameplayMode === 'voyage'
+                      ? `Berlayar (${previewIslandCount} Pulau)`
+                      : 'Kuis Klasik'}
+                  </dd>
+                </div>
+                <div className="py-2 flex items-center justify-between gap-2">
+                  <dt className="text-slate-400">Timer Kuis</dt>
+                  <dd className="font-mono-num font-bold text-amber-300">
+                    {settings.quizDurationMinutes > 0
+                      ? `Global ${settings.quizDurationMinutes} Menit`
+                      : 'Per-Soal'}
+                  </dd>
+                </div>
+                <div className="py-2 flex items-center justify-between gap-2">
+                  <dt className="text-slate-400">Tampilan &amp; Soal</dt>
+                  <dd className="font-mono-num font-bold text-slate-200 text-right">
+                    {effectiveDeckSize} Soal ·{' '}
+                    {settings.compactMode ? 'Ringkas' : 'Normal'}
+                  </dd>
+                </div>
+              </dl>
             </div>
           </div>
         </div>

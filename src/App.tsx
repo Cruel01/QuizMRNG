@@ -14,15 +14,22 @@ import {
   evaluateAnswer,
   getCorrectAnswerDisplay,
   getDebuffMilestones,
+  getEffectiveParticipationMode,
+  getEnabledPowerups,
   getOrCreateDeviceId,
   getSessionLockFlags,
   getStreakRewardTarget,
   getVoyageProgressState,
   grantPowerupToSlots,
+  isGamificationActive,
   isGlobalQuizTimerActive,
+  isMilestoneDropActive,
+  isPowerupEnabled,
+  isStreakRewardActive,
+  parseClassGateInput,
   pickSabotageTarget,
   prepareQuizDeck,
-  rollWeightedPowerup,
+  rollAllowedPowerup,
   safeGetStorage,
   safeRemoveStorage,
   safeSetStorage,
@@ -108,9 +115,23 @@ function readInitialCompactParam(): boolean {
   }
 }
 
+function hasExplicitRoomOrAutostartParam(): boolean {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('room') !== null || params.get('autostart') === '1';
+  } catch {
+    return false;
+  }
+}
+
 export default function App() {
   const deviceId = useMemo(() => getOrCreateDeviceId(), []);
   const [roomCode, setRoomCode] = useState<string>(() => readInitialRoomCode());
+  const [roomGateUnlocked, setRoomGateUnlocked] = useState<boolean>(() =>
+    hasExplicitRoomOrAutostartParam()
+  );
+  const [roomGateInput, setRoomGateInput] = useState<string>('');
+  const [roomGateError, setRoomGateError] = useState<string>('');
 
   const storageScope = roomCode || 'default';
 
@@ -265,6 +286,8 @@ export default function App() {
 
   const screenRef = useRef(screen);
   screenRef.current = screen;
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
   const immuneRef = useRef(immuneQuestionsRemaining);
   immuneRef.current = immuneQuestionsRemaining;
   const feedbackRef = useRef(feedback);
@@ -276,16 +299,29 @@ export default function App() {
   const toastTimerRef = useRef<number | null>(null);
   const isAutostartDemoRef = useRef(false);
 
+  const gamificationActive = isGamificationActive(settings);
+  const enabledPowerups = useMemo(
+    () => getEnabledPowerups(settings),
+    [settings]
+  );
+  const streakEnabled = settings.streakEnabled !== false;
+  const milestoneDropsEnabled = settings.milestoneDropsEnabled !== false;
+
   const isGlobalTimer = useMemo(
     () => isGlobalQuizTimerActive(sessionMode, settings),
     [sessionMode, settings]
   );
 
+  const effectivePartMode = useMemo(
+    () => getEffectiveParticipationMode(settings),
+    [settings]
+  );
+
   const resolvedTeamName = useMemo(() => {
-    if (settings.participationMode === 'solo') return '';
-    if (settings.participationMode === 'team') return teamName.trim();
+    if (effectivePartMode === 'solo') return '';
+    if (effectivePartMode === 'team') return teamName.trim();
     return teamModeChoice === 'team' ? teamName.trim() : '';
-  }, [settings.participationMode, teamModeChoice, teamName]);
+  }, [effectivePartMode, teamModeChoice, teamName]);
 
   const voyageProgress = useMemo(() => {
     if (settings.gameplayMode !== 'voyage') return null;
@@ -316,10 +352,13 @@ export default function App() {
       currentInv: (PowerupId | null)[],
       currentScoreVal: number,
       currentMilestones: number[],
-      currentImmune: number
+      currentImmune: number,
+      settingsOverride?: QuizSettings
     ) => {
       const q = qList[idx];
       if (!q) return;
+      const effectiveSettings = settingsOverride || settings;
+      const effectiveGamification = isGamificationActive(effectiveSettings);
 
       setSelectedSingleIndex(null);
       setSelectedMultipleIndices([]);
@@ -336,10 +375,15 @@ export default function App() {
       const optLen = (q.options || []).length;
       const shouldShuffleOpts =
         (q.type === 'MC' || q.type === 'MS') &&
-        (shouldGlitchShuffle || settings.shuffleOptions);
+        ((effectiveGamification && shouldGlitchShuffle) ||
+          effectiveSettings.shuffleOptions);
       setOptionOrder(computeShuffledOrder(optLen, shouldShuffleOpts));
 
-      if (shouldGlitchShuffle && (q.type === 'MC' || q.type === 'MS')) {
+      if (
+        effectiveGamification &&
+        shouldGlitchShuffle &&
+        (q.type === 'MC' || q.type === 'MS')
+      ) {
         setGlitchShuffleForNext(false);
         setGlitchShake(true);
         window.setTimeout(() => setGlitchShake(false), 750);
@@ -347,12 +391,18 @@ export default function App() {
         setGlitchShuffleForNext(false);
       }
 
+      if (!isMilestoneDropActive(effectiveSettings)) return;
+
       const qNum = idx + 1;
       const milestones = getDebuffMilestones(qList.length);
       if (milestones.includes(qNum) && !currentMilestones.includes(qNum)) {
+        const rolled = rollAllowedPowerup(
+          'debuff',
+          getEnabledPowerups(effectiveSettings)
+        );
+        if (!rolled) return;
         const updatedMilestones = [...currentMilestones, qNum];
         setAwardedDebuffMilestones(updatedMilestones);
-        const rolled = rollWeightedPowerup('debuff');
         const grantRes = grantPowerupToSlots(currentInv, rolled);
         setPowerupInventory(grantRes.nextInventory);
         if (grantRes.bonusPoints > 0) {
@@ -365,7 +415,7 @@ export default function App() {
         }
       }
     },
-    [notify, settings.shuffleOptions]
+    [notify, settings]
   );
 
   const startGameplay = useCallback(
@@ -427,7 +477,16 @@ export default function App() {
       setShowConfetti(false);
 
       setScreen('quiz');
-      prepareQuestionView(0, deck, false, [null, null], 0, [], 0);
+      prepareQuestionView(
+        0,
+        deck,
+        false,
+        [null, null],
+        0,
+        [],
+        0,
+        activeSettings
+      );
 
       if (!skipCountdown) {
         setPreCountdown(3);
@@ -483,6 +542,7 @@ export default function App() {
         const timerParam = Number(params.get('timer') || 0);
         const teamParam = (params.get('team') || '').trim();
         const showLbParam = params.get('live_lb') === '1';
+        const gamificationParam = params.get('gamification');
 
         const demoSettings: QuizSettings = {
           ...settings,
@@ -493,6 +553,12 @@ export default function App() {
               : settings.quizDurationMinutes,
           showLiveLeaderboardToPlayers:
             showLbParam || settings.showLiveLeaderboardToPlayers,
+          gamificationEnabled:
+            gamificationParam === '0'
+              ? false
+              : gamificationParam === '1'
+                ? true
+                : settings.gamificationEnabled,
         };
         if (teamParam) {
           setTeamModeChoice('team');
@@ -590,6 +656,7 @@ export default function App() {
       onIncomingSabotage: (ev: SabotageEvent) => {
         if (ev.targetDeviceId !== deviceId) return;
         if (screenRef.current !== 'quiz') return;
+        if (!isPowerupEnabled(settingsRef.current, ev.type)) return;
 
         if (immuneRef.current > 0) {
           notify(`Perisai menangkis serangan ${ev.attackerName || 'lawan'}!`);
@@ -717,28 +784,35 @@ export default function App() {
 
       if (isCorrect) {
         nextCorrectCount += 1;
-        nextStreak += 1;
-        if (nextStreak >= 2) {
-          playStreakComboFx(nextStreak);
-        } else {
-          playCorrectFx();
-        }
-        const streakTarget = getStreakRewardTarget(playDeck.length);
-        if (nextStreak >= streakTarget) {
-          nextStreak = 0;
-          const rolled = rollWeightedPowerup();
-          const res = grantPowerupToSlots(nextInventory, rolled);
-          nextInventory = res.nextInventory;
-          if (res.bonusPoints > 0) {
-            nextScore += res.bonusPoints;
-            notify(
-              `Slot penuh! Streak ${streakTarget} Benar dikonversi menjadi +${res.bonusPoints} poin.`
-            );
+        if (isStreakRewardActive(settings)) {
+          nextStreak += 1;
+          if (nextStreak >= 2) {
+            playStreakComboFx(nextStreak);
           } else {
-            notify(
-              `Streak ${streakTarget} Benar: Dapat item ${POWERUP_CATALOG[rolled].name}!`
-            );
+            playCorrectFx();
           }
+          const streakTarget = getStreakRewardTarget(playDeck.length);
+          if (nextStreak >= streakTarget) {
+            nextStreak = 0;
+            const rolled = rollAllowedPowerup(null, enabledPowerups);
+            if (rolled) {
+              const res = grantPowerupToSlots(nextInventory, rolled);
+              nextInventory = res.nextInventory;
+              if (res.bonusPoints > 0) {
+                nextScore += res.bonusPoints;
+                notify(
+                  `Slot penuh! Streak ${streakTarget} Benar dikonversi menjadi +${res.bonusPoints} poin.`
+                );
+              } else {
+                notify(
+                  `Streak ${streakTarget} Benar: Dapat item ${POWERUP_CATALOG[rolled].name}!`
+                );
+              }
+            }
+          }
+        } else {
+          nextStreak = 0;
+          playCorrectFx();
         }
       } else {
         playWrongFx();
@@ -820,6 +894,7 @@ export default function App() {
       currentStreak,
       deviceId,
       doubleScoreActive,
+      gamificationActive,
       glitchShuffleForNext,
       globalTimeLeft,
       immuneQuestionsRemaining,
@@ -1091,6 +1166,16 @@ export default function App() {
     );
     setDockedIslandModal(null);
 
+    if (!reward.powerupId || !gamificationActive) {
+      const nextScore = score + reward.bonusPoints;
+      setScore(nextScore);
+      notify(
+        `Berlabuh di ${reward.islandName}: +${reward.bonusPoints} poin ekspedisi!`
+      );
+      advanceAfterQuestion(nextScore);
+      return;
+    }
+
     const grantRes = grantPowerupToSlots(powerupInventory, reward.powerupId);
     const totalBonus = reward.bonusPoints + grantRes.bonusPoints;
     const nextScore = score + totalBonus;
@@ -1111,6 +1196,7 @@ export default function App() {
   };
 
   const handleActivatePowerup = (slotIdx: number) => {
+    if (!gamificationActive) return;
     if (
       powerupUsedThisQuestion ||
       isFrozen ||
@@ -1180,6 +1266,18 @@ export default function App() {
     }
   };
 
+  const handleSubmitRoomGate = () => {
+    const res = parseClassGateInput(roomGateInput);
+    if (!res.valid) {
+      setRoomGateError(res.error || 'Masukkan kode kelas terlebih dahulu.');
+      return;
+    }
+    setRoomGateError('');
+    handleSwitchRoom(res.roomCode);
+    setRoomGateUnlocked(true);
+    notify(`Berhasil masuk kelas ${res.displayLabel}!`);
+  };
+
   // Lobby actions
   const handleLobbyStart = () => {
     const effectiveLocked = hasPlayedThisDevice && !settings.allowReplay;
@@ -1190,8 +1288,8 @@ export default function App() {
       return;
     }
     const needsTeam =
-      settings.participationMode === 'team' ||
-      (settings.participationMode === 'either' && teamModeChoice === 'team');
+      effectivePartMode === 'team' ||
+      (effectivePartMode === 'either' && teamModeChoice === 'team');
     if (needsTeam && !teamName.trim()) {
       setNameError('Silakan masukkan nama tim / kru terlebih dahulu!');
       return;
@@ -1268,7 +1366,8 @@ export default function App() {
   };
 
   const handleSwitchRoom = (nextRoomRaw: string) => {
-    const clean = sanitizeRoomCode(nextRoomRaw);
+    const sanitized = sanitizeRoomCode(nextRoomRaw);
+    const clean = sanitized === 'UMUM' || sanitized === 'DEFAULT' ? '' : sanitized;
     if (clean === roomCode) return;
     safeSetStorage(ROOM_CODE_STORAGE_KEY, clean);
     setRoomCode(clean);
@@ -1464,6 +1563,11 @@ export default function App() {
               sessionMode={sessionMode}
               settings={settings}
               roomCode={roomCode}
+              roomGateUnlocked={roomGateUnlocked}
+              roomGateInput={roomGateInput}
+              roomGateError={roomGateError}
+              waitingPlayers={waitingPlayers}
+              activePlayers={activePlayers}
               playerName={playerName}
               teamModeChoice={teamModeChoice}
               teamName={teamName}
@@ -1474,6 +1578,11 @@ export default function App() {
               recoverableProgress={recoverableProgress}
               isMuted={isMuted}
               onToggleMute={handleToggleMute}
+              onRoomGateInputChange={(v) => {
+                setRoomGateInput(v);
+                if (roomGateError) setRoomGateError('');
+              }}
+              onSubmitRoomGate={handleSubmitRoomGate}
               onOpenRoomModal={() => {
                 setRoomInputDraft(roomCode);
                 setRoomModalOpen(true);
@@ -1504,6 +1613,8 @@ export default function App() {
             <WaitingRoomScreen
               playerName={playerName}
               teamName={resolvedTeamName || undefined}
+              roomCode={roomCode}
+              gameplayMode={settings.gameplayMode}
               deviceId={deviceId}
               waitingPlayers={waitingPlayers}
               showLiveLeaderboardToPlayers={settings.showLiveLeaderboardToPlayers}
@@ -1564,6 +1675,10 @@ export default function App() {
                 selfDeviceId={deviceId}
                 showLiveLeaderboardToPlayers={settings.showLiveLeaderboardToPlayers}
                 onOpenLiveLeaderboard={() => setLiveLbModalOpen(true)}
+                gamificationEnabled={gamificationActive}
+                enabledPowerups={enabledPowerups}
+                streakEnabled={streakEnabled}
+                milestoneDropsEnabled={milestoneDropsEnabled}
                 currentStreak={currentStreak}
                 compactMode={settings.compactMode}
                 powerupInventory={powerupInventory}
@@ -1595,6 +1710,8 @@ export default function App() {
               {dockedIslandModal && (
                 <IslandMinigameModal
                   island={dockedIslandModal}
+                  gamificationEnabled={gamificationActive}
+                  enabledPowerups={enabledPowerups}
                   onComplete={handleIslandMinigameComplete}
                 />
               )}
@@ -1653,7 +1770,10 @@ export default function App() {
               onDeleteQuestion={handleDeleteQuestion}
               onDeleteParticipant={handleDeleteParticipant}
               onResetAllLeaderboard={handleResetAllLeaderboard}
-              onClose={() => setScreen('lobby')}
+              onClose={() => {
+                setRoomGateUnlocked(true);
+                setScreen('lobby');
+              }}
               onNotify={notify}
             />
           )}
@@ -1674,19 +1794,21 @@ export default function App() {
             <span className="truncate">{cloudLabel}</span>
           </div>
 
-          <button
-            type="button"
-            onClick={() => {
-              playPopClickFx();
-              setAdminPinInput('');
-              setAdminPinError(false);
-              setAdminModalOpen(true);
-            }}
-            className="bg-[#131C31]/95 hover:bg-slate-800 text-slate-100 text-xs font-semibold px-3 py-1.5 rounded-lg border border-[#23304C] inline-flex items-center gap-1.5 shadow-lg cursor-pointer"
-          >
-            <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-            <span>Admin</span>
-          </button>
+          {screen !== 'admin' && (
+            <button
+              type="button"
+              onClick={() => {
+                playPopClickFx();
+                setAdminPinInput('');
+                setAdminPinError(false);
+                setAdminModalOpen(true);
+              }}
+              className="bg-[#131C31]/95 hover:bg-slate-800 text-slate-100 text-xs font-semibold px-3 py-1.5 rounded-lg border border-[#23304C] inline-flex items-center gap-1.5 shadow-lg cursor-pointer"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+              <span>Admin</span>
+            </button>
+          )}
         </div>
 
         {/* Modal Ganti Kode Ruangan (Dari Lobby) */}

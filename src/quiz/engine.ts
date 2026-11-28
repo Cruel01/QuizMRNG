@@ -1,4 +1,4 @@
-import { MAX_POWERUP_SLOTS, POWERUP_CATALOG } from './questions';
+import { ALL_POWERUP_IDS, MAX_POWERUP_SLOTS, POWERUP_CATALOG } from './questions';
 import type {
   ActivePlayer,
   MergedLeaderboardRow,
@@ -492,6 +492,46 @@ export function rollWeightedPowerup(
   return pool[0]?.id ?? 'FIFTY_FIFTY';
 }
 
+export function rollAllowedPowerup(
+  onlyKind: PowerupKind | null = null,
+  allowedIds?: PowerupId[],
+  rng: () => number = Math.random
+): PowerupId | null {
+  const allowedSet = allowedIds ? new Set(allowedIds) : null;
+  const pool = Object.values(POWERUP_CATALOG).filter(
+    (item) =>
+      (!onlyKind || item.kind === onlyKind) &&
+      (!allowedSet || allowedSet.has(item.id))
+  );
+  if (pool.length === 0) return null;
+  const totalWeight = pool.reduce((sum, item) => sum + item.weight, 0);
+  let r = rng() * totalWeight;
+  for (const item of pool) {
+    if (r < item.weight) return item.id;
+    r -= item.weight;
+  }
+  return pool[0]?.id ?? null;
+}
+
+export function rollIslandRewardPowerup(
+  gamificationEnabled: boolean,
+  allowedIds?: PowerupId[],
+  favorDebuff: boolean = false,
+  rng: () => number = Math.random
+): PowerupId | null {
+  if (!gamificationEnabled) return null;
+  const activeIds = allowedIds ?? ALL_POWERUP_IDS;
+  if (activeIds.length === 0) return null;
+  if (favorDebuff) {
+    if (activeIds.includes('TORNADO') && rng() < 0.45) {
+      return 'TORNADO';
+    }
+    const debuff = rollAllowedPowerup('debuff', activeIds, rng);
+    if (debuff) return debuff;
+  }
+  return rollAllowedPowerup(null, activeIds, rng);
+}
+
 export function grantPowerupToSlots(
   inventory: (PowerupId | null)[],
   powerupId: PowerupId
@@ -787,3 +827,115 @@ export function getOrCreateDeviceId(): string {
   }
   return id;
 }
+
+export function isGamificationActive(
+  settings?: Partial<QuizSettings> | null
+): boolean {
+  return settings?.gamificationEnabled !== false;
+}
+
+export function isTeamParticipationAvailable(
+  settings?: Partial<QuizSettings> | null
+): boolean {
+  return settings?.gameplayMode === 'voyage';
+}
+
+export function getEffectiveParticipationMode(
+  settings?: Partial<QuizSettings> | null
+): 'solo' | 'team' | 'either' {
+  if (!isTeamParticipationAvailable(settings)) {
+    return 'solo';
+  }
+  return settings?.participationMode || 'either';
+}
+
+export function getEnabledPowerups(
+  settings?: Partial<QuizSettings> | null
+): PowerupId[] {
+  if (!isGamificationActive(settings)) return [];
+  if (!settings || settings.enabledPowerups === undefined) {
+    return [...ALL_POWERUP_IDS];
+  }
+  if (!Array.isArray(settings.enabledPowerups)) {
+    return [...ALL_POWERUP_IDS];
+  }
+  const seen = new Set<PowerupId>();
+  const valid: PowerupId[] = [];
+  for (const id of settings.enabledPowerups) {
+    if (id in POWERUP_CATALOG && !seen.has(id)) {
+      seen.add(id);
+      valid.push(id);
+    }
+  }
+  return valid;
+}
+
+export function isPowerupEnabled(
+  settings: Partial<QuizSettings> | null | undefined,
+  id: PowerupId
+): boolean {
+  return getEnabledPowerups(settings).includes(id);
+}
+
+export function isStreakRewardActive(
+  settings?: Partial<QuizSettings> | null
+): boolean {
+  if (!isGamificationActive(settings)) return false;
+  if (settings?.streakEnabled === false) return false;
+  return getEnabledPowerups(settings).length > 0;
+}
+
+export function isMilestoneDropActive(
+  settings?: Partial<QuizSettings> | null
+): boolean {
+  if (!isGamificationActive(settings)) return false;
+  if (settings?.milestoneDropsEnabled === false) return false;
+  return getEnabledPowerups(settings).some(
+    (id) => POWERUP_CATALOG[id]?.kind === 'debuff'
+  );
+}
+
+export function togglePowerupInList(
+  current: PowerupId[],
+  id: PowerupId
+): PowerupId[] {
+  const exists = current.includes(id);
+  const nextSet = new Set(current);
+  if (exists) {
+    nextSet.delete(id);
+  } else {
+    nextSet.add(id);
+  }
+  return ALL_POWERUP_IDS.filter((pid) => nextSet.has(pid));
+}
+
+export function parseClassGateInput(raw: string): {
+  valid: boolean;
+  roomCode: string;
+  displayLabel: string;
+  error?: string;
+} {
+  const clean = sanitizeRoomCode(raw);
+  if (!clean) {
+    return {
+      valid: false,
+      roomCode: '',
+      displayLabel: '',
+      error:
+        'Silakan masukkan kode kelas terlebih dahulu (misalnya KELAS8A atau UMUM).',
+    };
+  }
+  if (clean === 'UMUM' || clean === 'DEFAULT') {
+    return {
+      valid: true,
+      roomCode: '',
+      displayLabel: 'Umum',
+    };
+  }
+  return {
+    valid: true,
+    roomCode: clean,
+    displayLabel: `#${clean}`,
+  };
+}
+

@@ -13,7 +13,7 @@ export const GOOGLE_SITES_BODY_MARKUP = `<body id="app-body" class="min-h-screen
           <div>
             <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">Kuis Trivia Nusantara</h1>
             <p class="text-xs sm:text-sm text-slate-400 mt-0.5">
-              <span id="lobby-total-questions" class="font-mono-num text-slate-200 font-semibold">30</span> pertanyaan · Buff &amp; Debuff real-time<span id="lobby-meta-flags"></span>
+              <span id="lobby-total-questions" class="font-mono-num text-slate-200 font-semibold">30</span> pertanyaan · <span id="lobby-subtitle-mode">Buff &amp; Debuff real-time</span><span id="lobby-meta-flags"></span>
             </p>
           </div>
         </div>
@@ -33,7 +33,7 @@ export const GOOGLE_SITES_BODY_MARKUP = `<body id="app-body" class="min-h-screen
 
           <div class="flex items-center gap-1.5">
             <button type="button" id="btn-lobby-room" onclick="openRoomModal()" title="Ganti Kode Ruangan / Kelas"
-              class="arcade-btn px-2.5 py-1.5 rounded-lg bg-[#0B1120] hover:bg-slate-800 border border-[#23304C] text-xs font-bold text-slate-200 inline-flex items-center gap-1.5 cursor-pointer">
+              class="hidden arcade-btn px-2.5 py-1.5 rounded-lg bg-[#0B1120] hover:bg-slate-800 border border-[#23304C] text-xs font-bold text-slate-200 inline-flex items-center gap-1.5 cursor-pointer">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5 text-sky-400" aria-hidden="true">
                 <path d="M13 4h3a2 2 0 0 1 2 2v14"/><path d="M2 20h3"/><path d="M13 20h9"/><path d="M10 12v.01"/><path d="M13 4.562v16.157a1 1 0 0 1-1.242.97L5 20V5.562a2 2 0 0 1 1.515-1.94l4-1A2 2 0 0 1 13 4.561Z"/>
               </svg>
@@ -47,174 +47,170 @@ export const GOOGLE_SITES_BODY_MARKUP = `<body id="app-body" class="min-h-screen
         </div>
       </div>
 
-      <!-- Tab Interaktif: Kategori Soal vs Buff & Debuff -->
-      <div class="flex items-center justify-between gap-3 mb-4">
-        <div role="tablist" aria-label="Informasi Kuis" class="inline-flex items-center gap-1 p-1 bg-[#0B1120] border border-[#23304C] rounded-xl">
-          <button id="tab-btn-categories" type="button" role="tab" aria-selected="true" onclick="switchLobbyTab('categories')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer whitespace-nowrap bg-amber-400 text-slate-950">
-            Kategori Soal (3)
-          </button>
-          <button id="tab-btn-powerups" type="button" role="tab" aria-selected="false" onclick="switchLobbyTab('powerups')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer whitespace-nowrap text-slate-300 hover:text-white">
-            Buff &amp; Debuff (6)
-          </button>
+      <!-- GERBANG KODE KELAS -->
+      <div id="lobby-room-gate" class="max-w-lg mx-auto bg-[#0B1120] border border-sky-400/35 rounded-2xl p-6 sm:p-7 text-center space-y-4">
+        <div class="w-12 h-12 rounded-2xl bg-sky-400/15 border border-sky-400/30 text-sky-300 flex items-center justify-center mx-auto">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6" aria-hidden="true"><path d="M13 4h3a2 2 0 0 1 2 2v14"/><path d="M2 20h3"/><path d="M13 20h9"/><path d="M10 12v.01"/><path d="M13 4.562v16.157a1 1 0 0 1-1.242.97L5 20V5.562a2 2 0 0 1 1.515-1.94l4-1A2 2 0 0 1 13 4.561Z"/></svg>
         </div>
-        <span id="lobby-cat-hint-label" class="text-[11px] text-slate-400 hidden sm:inline">Klik kartu kategori untuk lihat topik</span>
-      </div>
-
-      <!-- Panel Tab: Kategori Soal Dinamis -->
-      <div id="lobby-panel-categories" class="mb-6 space-y-3">
-        <div id="lobby-categories-grid" class="grid grid-cols-1 sm:grid-cols-3 gap-3"></div>
-        <div id="category-hint-drawer" class="hidden bg-[#0B1120] border border-[#23304C] rounded-xl px-4 py-3 text-xs text-slate-300 flex items-center justify-between gap-2">
-          <span id="category-hint-text"></span>
-          <span class="text-[11px] text-slate-400 shrink-0 font-mono-num">MC · TF · MS · Isian</span>
+        <div class="space-y-1.5">
+          <h2 class="text-lg sm:text-xl font-extrabold text-white">Masukkan Kode Kelas</h2>
+          <p class="text-xs sm:text-sm text-slate-400 leading-relaxed max-w-md mx-auto">
+            Masukkan kode kelas dari penyelenggara agar kamu dapat mengakses kuis dan ruang tunggu. Ketik <strong class="text-slate-200 font-mono-num">UMUM</strong> jika menggunakan ruang default.
+          </p>
         </div>
-      </div>
-
-      <!-- Panel Tab: Buff & Debuff -->
-      <div id="lobby-panel-powerups" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-6">
-        <div class="bg-[#0B1120] border border-[#23304C] rounded-xl p-3.5 flex items-start gap-3">
-          <div class="w-8 h-8 rounded-lg bg-[#131C31] border border-[#23304C] flex items-center justify-center shrink-0">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-amber-300" aria-hidden="true"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></svg>
+        <div class="space-y-3 text-left">
+          <div>
+            <label for="lobby-room-gate-input" class="block text-xs font-semibold text-slate-300 mb-1.5">Kode Kelas / Ruangan</label>
+            <input id="lobby-room-gate-input" type="text" maxlength="20" placeholder="Contoh: KELAS8A atau UMUM"
+              oninput="this.value=this.value.toUpperCase(); document.getElementById('lobby-room-gate-error').classList.add('hidden')"
+              onkeydown="if(event.key==='Enter') submitLobbyRoomGate()"
+              class="w-full px-4 py-3.5 rounded-xl bg-white text-slate-950 font-mono-num font-bold text-center text-base sm:text-lg tracking-wider uppercase placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-400">
+            <p id="lobby-room-gate-error" class="hidden text-rose-400 text-xs mt-1.5 font-medium text-center" role="alert"></p>
           </div>
-          <div class="min-w-0">
-            <div class="flex items-center gap-2 text-xs font-bold text-white"><span>Skor 2x</span><span class="text-slate-500">·</span><span class="text-emerald-400">Buff</span></div>
-            <p class="text-xs text-slate-400 mt-0.5 leading-snug">Menggandakan poin pada soal aktif ini!</p>
-          </div>
-        </div>
-        <div class="bg-[#0B1120] border border-[#23304C] rounded-xl p-3.5 flex items-start gap-3">
-          <div class="w-8 h-8 rounded-lg bg-[#131C31] border border-[#23304C] flex items-center justify-center shrink-0">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-sky-300" aria-hidden="true"><circle cx="6" cy="6" r="3"/><path d="M8.12 8.12 12 12"/><path d="M20 4 8.12 15.88"/><circle cx="6" cy="18" r="3"/><path d="M14.8 14.8 20 20"/></svg>
-          </div>
-          <div class="min-w-0">
-            <div class="flex items-center gap-2 text-xs font-bold text-white"><span>50:50</span><span class="text-slate-500">·</span><span class="text-emerald-400">Buff</span></div>
-            <p class="text-xs text-slate-400 mt-0.5 leading-snug">Menghapus 2 opsi jawaban yang salah.</p>
-          </div>
-        </div>
-        <div class="bg-[#0B1120] border border-[#23304C] rounded-xl p-3.5 flex items-start gap-3">
-          <div class="w-8 h-8 rounded-lg bg-[#131C31] border border-[#23304C] flex items-center justify-center shrink-0">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-emerald-300" aria-hidden="true"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg>
-          </div>
-          <div class="min-w-0">
-            <div class="flex items-center gap-2 text-xs font-bold text-white"><span>Perisai</span><span class="text-slate-500">·</span><span class="text-emerald-400">Buff</span></div>
-            <p class="text-xs text-slate-400 mt-0.5 leading-snug">Menangkal otomatis serangan Debuff lawan.</p>
-          </div>
-        </div>
-        <div class="bg-[#0B1120] border border-[#23304C] rounded-xl p-3.5 flex items-start gap-3">
-          <div class="w-8 h-8 rounded-lg bg-[#131C31] border border-[#23304C] flex items-center justify-center shrink-0">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-cyan-300" aria-hidden="true"><line x1="2" x2="22" y1="12" y2="12"/><line x1="12" x2="12" y1="2" y2="22"/><path d="m20 16-4-4 4-4"/><path d="m4 8 4 4-4 4"/><path d="m16 4-4 4-4-4"/><path d="m8 20 4-4 4 4"/></svg>
-          </div>
-          <div class="min-w-0">
-            <div class="flex items-center gap-2 text-xs font-bold text-white"><span>Bekukan #1</span><span class="text-slate-500">·</span><span class="text-sky-400">Debuff</span></div>
-            <p class="text-xs text-slate-400 mt-0.5 leading-snug">Membekukan layar peringkat #1 aktif selama 4 detik!</p>
-          </div>
-        </div>
-        <div class="bg-[#0B1120] border border-[#23304C] rounded-xl p-3.5 flex items-start gap-3">
-          <div class="w-8 h-8 rounded-lg bg-[#131C31] border border-[#23304C] flex items-center justify-center shrink-0">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-fuchsia-300" aria-hidden="true"><path d="m18 14 4 4-4 4"/><path d="m18 2 4 4-4 4"/><path d="M2 18h1.973a4 4 0 0 0 3.3-1.7l5.454-8.6a4 4 0 0 1 3.3-1.7H22"/><path d="M2 6h1.972a4 4 0 0 1 3.6 2.2"/><path d="M22 18h-6.041a4 4 0 0 1-3.3-1.8l-.359-.45"/></svg>
-          </div>
-          <div class="min-w-0">
-            <div class="flex items-center gap-2 text-xs font-bold text-white"><span>Acak Opsi</span><span class="text-slate-500">·</span><span class="text-sky-400">Debuff</span></div>
-            <p class="text-xs text-slate-400 mt-0.5 leading-snug">Mengacak posisi tombol opsi lawan pada soal berikutnya.</p>
-          </div>
-        </div>
-        <div class="bg-[#0B1120] border border-[#23304C] rounded-xl p-3.5 flex items-start gap-3">
-          <div class="w-8 h-8 rounded-lg bg-[#131C31] border border-[#23304C] flex items-center justify-center shrink-0">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-rose-300" aria-hidden="true"><path d="M21 4H3"/><path d="M18 8H6"/><path d="M19 12H9"/><path d="M16 16h-6"/><path d="M11 20H9"/></svg>
-          </div>
-          <div class="min-w-0">
-            <div class="flex items-center gap-2 text-xs font-bold text-white"><span>Puting Beliung</span><span class="text-slate-500">·</span><span class="text-rose-400">Debuff</span></div>
-            <p class="text-xs text-slate-400 mt-0.5 leading-snug">Badai angin 5 detik mengguncang layar &amp; mengacak opsi lawan!</p>
-          </div>
-        </div>
-      </div>
-
-      <!-- Banner Pemulihan Sesi -->
-      <div id="recoverable-progress-banner" class="hidden bg-sky-500/10 border border-sky-400/30 rounded-xl p-4 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h2 class="text-sm font-bold text-sky-300">Sesi Sebelumnya Ditemukan</h2>
-          <p id="recoverable-progress-info" class="text-xs text-slate-300 mt-0.5"></p>
-        </div>
-        <div class="flex items-center gap-2 shrink-0">
-          <button type="button" onclick="resumeRecoverableProgress()" class="arcade-btn bg-sky-400 hover:bg-sky-300 text-slate-950 font-bold text-xs px-4 py-2.5 rounded-lg cursor-pointer inline-flex items-center gap-1.5 whitespace-nowrap">
-            Lanjutkan
-          </button>
-          <button type="button" onclick="discardRecoverableProgress()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs px-3 py-2.5 rounded-lg cursor-pointer whitespace-nowrap">
-            Abaikan
+          <button type="button" onclick="submitLobbyRoomGate()" class="arcade-btn w-full bg-sky-400 hover:bg-sky-300 text-slate-950 font-extrabold text-sm sm:text-base py-3.5 px-6 rounded-xl cursor-pointer inline-flex items-center justify-center gap-2">
+            Masuk Kelas
           </button>
         </div>
       </div>
 
-      <!-- Status Tunggu Admin -->
-      <div id="awaiting-admin-mode-banner" class="bg-[#0B1120] border border-[#23304C] rounded-xl p-6 text-center mb-6">
-        <div class="w-12 h-12 rounded-2xl bg-amber-400/10 border border-amber-400/25 text-amber-300 flex items-center justify-center mx-auto mb-3">
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" class="w-6 h-6 anim-hourglass-flip">
-            <path d="M6 3h12M6 21h12" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/>
-            <path d="M7.5 3v3.8c0 2.1 1.6 3.7 3.7 4.7l.8.5.8-.5c2.1-1 3.7-2.6 3.7-4.7V3" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/>
-            <path d="M7.5 21v-3.8c0-2.1 1.6-3.7 3.7-4.7l.8-.5.8.5c2.1 1 3.7 2.6 3.7 4.7V21" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/>
-            <path d="M9.3 6.2h5.4c-.3 1.4-1.4 2.5-2.7 3.1-1.3-.6-2.4-1.7-2.7-3.1Z" fill="currentColor" fill-opacity="0.45"/>
-            <circle cx="12" cy="13.5" r="0.95" fill="currentColor" class="anim-sand-drop"/>
-            <path d="M8.8 19.5c.8-1.4 2-2.2 3.2-2.2s2.4.8 3.2 2.2H8.8Z" fill="currentColor" fill-opacity="0.85"/>
-          </svg>
-        </div>
-        <h2 class="font-bold text-base sm:text-lg text-white">Menunggu Penyelenggara (Admin)</h2>
-        <p class="text-xs sm:text-sm text-slate-400 mt-1 max-w-md mx-auto leading-relaxed">
-          Kuis belum dibuka. Halaman ini otomatis aktif begitu Admin memilih pelaksanaan secara <strong class="text-slate-200">Mode Bebas</strong> atau <strong class="text-slate-200">Live Bareng</strong>.
-        </p>
-      </div>
-
-      <!-- Input Nama Pemain & Tim -->
-      <div id="lobby-input-container" class="hidden max-w-lg mx-auto mb-6 space-y-3">
-        <div id="lobby-participation-wrap" class="hidden flex items-center justify-between gap-2 bg-[#0B1120] border border-[#23304C] p-1.5 rounded-xl">
-          <button id="btn-part-solo" type="button" onclick="selectTeamChoice('solo')" class="flex-1 py-2 rounded-lg text-xs font-bold cursor-pointer bg-amber-400 text-slate-950">Solo</button>
-          <button id="btn-part-team" type="button" onclick="selectTeamChoice('team')" class="flex-1 py-2 rounded-lg text-xs font-bold cursor-pointer text-slate-300 hover:text-white">Tim / Kru</button>
-        </div>
-        <div>
-          <div class="flex items-center justify-between mb-2">
-            <label for="player-name" class="block text-xs sm:text-sm font-semibold text-slate-300">Nama Pemain</label>
-            <span id="lobby-replay-hint" class="hidden text-[11px] font-semibold text-emerald-400">Mode Latihan aktif · Boleh main ulang</span>
+      <!-- KONTEN LOBBY SETELAH KODE KELAS DIMASUKKAN -->
+      <div id="lobby-unlocked-content" class="hidden">
+        <!-- Tab Interaktif: Kategori Soal vs Buff & Debuff -->
+        <div class="flex items-center justify-between gap-3 mb-4">
+          <div role="tablist" aria-label="Informasi Kuis" class="inline-flex items-center gap-1 p-1 bg-[#0B1120] border border-[#23304C] rounded-xl">
+            <button id="tab-btn-categories" type="button" role="tab" aria-selected="true" onclick="switchLobbyTab('categories')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer whitespace-nowrap bg-amber-400 text-slate-950">
+              Kategori Soal (3)
+            </button>
+            <button id="tab-btn-powerups" type="button" role="tab" aria-selected="false" onclick="switchLobbyTab('powerups')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer whitespace-nowrap text-slate-300 hover:text-white">
+              Buff &amp; Debuff (6)
+            </button>
           </div>
-          <input id="player-name" type="text" maxlength="20" placeholder="Masukkan namamu di sini..." onkeydown="if(event.key==='Enter') handleLobbyStartClick()"
-            class="w-full px-4 py-3.5 rounded-xl bg-white text-slate-950 font-bold text-base sm:text-lg placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400">
+          <span id="lobby-cat-hint-label" class="text-[11px] text-slate-400 hidden sm:inline">Klik kartu kategori untuk lihat topik</span>
         </div>
-        <div id="lobby-team-input-wrap" class="hidden">
-          <label for="player-team-name" class="block text-xs sm:text-sm font-semibold text-sky-300 mb-1.5">Nama Tim / Kru Kapal</label>
-          <input id="player-team-name" type="text" maxlength="20" placeholder="Contoh: Garuda / Tim Bajak Laut A" onkeydown="if(event.key==='Enter') handleLobbyStartClick()"
-            class="w-full px-4 py-3 rounded-xl bg-white text-slate-950 font-bold text-sm sm:text-base placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-400">
-        </div>
-        <p id="name-error" class="hidden text-rose-400 text-xs mt-1 font-medium" role="alert">Silakan masukkan nama terlebih dahulu.</p>
-      </div>
 
-      <!-- Banner Sudah Selesai -->
-      <div id="already-played-banner" class="hidden bg-[#0B1120] border border-amber-400/30 rounded-xl p-5 text-center mb-6">
-        <div class="w-11 h-11 rounded-full bg-amber-400/15 text-amber-300 flex items-center justify-center mx-auto mb-2.5">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        <!-- Panel Tab: Kategori Soal Dinamis -->
+        <div id="lobby-panel-categories" class="mb-6 space-y-3">
+          <div id="lobby-categories-grid" class="grid grid-cols-1 sm:grid-cols-3 gap-3"></div>
+          <div id="category-hint-drawer" class="hidden bg-[#0B1120] border border-[#23304C] rounded-xl px-4 py-3 text-xs text-slate-300 flex items-center justify-between gap-2">
+            <span id="category-hint-text"></span>
+            <span class="text-[11px] text-slate-400 shrink-0 font-mono-num">MC · TF · MS · Isian</span>
+          </div>
         </div>
-        <h2 class="font-bold text-base sm:text-lg text-amber-300">Kuis Terkunci (Sudah Dikerjakan)</h2>
-        <p id="already-played-info" class="text-xs sm:text-sm text-slate-300 mt-1 max-w-md mx-auto"></p>
-      </div>
 
-      <!-- Aksi Utama Lobby -->
-      <div class="flex flex-col sm:flex-row justify-center gap-3 max-w-lg mx-auto">
-        <button id="btn-start-quiz" type="button" onclick="handleLobbyStartClick()" disabled
-          class="flex-1 bg-slate-800/80 text-slate-400 font-bold text-sm sm:text-base py-3.5 px-6 rounded-xl border border-slate-700 cursor-not-allowed inline-flex items-center justify-center gap-2 whitespace-nowrap">
-          Menunggu Admin...
-        </button>
-        <button id="btn-lobby-leaderboard" type="button" onclick="playPopClickFx(); showLeaderboardFromLobby()"
-          class="hidden arcade-btn bg-[#0B1120] hover:bg-slate-800 text-slate-100 font-semibold text-sm sm:text-base py-3.5 px-5 rounded-xl border border-[#23304C] cursor-pointer inline-flex items-center justify-center gap-2 whitespace-nowrap">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-amber-400" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
-          <span>Lihat Leaderboard</span>
-        </button>
+        <!-- Panel Tab: Buff & Debuff (Dinamis sesuai pilihan Admin) -->
+        <div id="lobby-panel-powerups" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-6"></div>
+
+        <!-- Banner Pemulihan Sesi -->
+        <div id="recoverable-progress-banner" class="hidden bg-sky-500/10 border border-sky-400/30 rounded-xl p-4 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 class="text-sm font-bold text-sky-300">Sesi Sebelumnya Ditemukan</h2>
+            <p id="recoverable-progress-info" class="text-xs text-slate-300 mt-0.5"></p>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <button type="button" onclick="resumeRecoverableProgress()" class="arcade-btn bg-sky-400 hover:bg-sky-300 text-slate-950 font-bold text-xs px-4 py-2.5 rounded-lg cursor-pointer inline-flex items-center gap-1.5 whitespace-nowrap">
+              Lanjutkan
+            </button>
+            <button type="button" onclick="discardRecoverableProgress()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs px-3 py-2.5 rounded-lg cursor-pointer whitespace-nowrap">
+              Abaikan
+            </button>
+          </div>
+        </div>
+
+        <!-- Status Tunggu Admin -->
+        <div id="awaiting-admin-mode-banner" class="bg-[#0B1120] border border-[#23304C] rounded-xl p-6 text-center mb-6">
+          <div class="w-12 h-12 rounded-2xl bg-amber-400/10 border border-amber-400/25 text-amber-300 flex items-center justify-center mx-auto mb-3">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" class="w-6 h-6 anim-hourglass-flip">
+              <path d="M6 3h12M6 21h12" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/>
+              <path d="M7.5 3v3.8c0 2.1 1.6 3.7 3.7 4.7l.8.5.8-.5c2.1-1 3.7-2.6 3.7-4.7V3" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/>
+              <path d="M7.5 21v-3.8c0-2.1 1.6-3.7 3.7-4.7l.8-.5.8.5c2.1 1 3.7 2.6 3.7 4.7V21" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/>
+              <path d="M9.3 6.2h5.4c-.3 1.4-1.4 2.5-2.7 3.1-1.3-.6-2.4-1.7-2.7-3.1Z" fill="currentColor" fill-opacity="0.45"/>
+              <circle cx="12" cy="13.5" r="0.95" fill="currentColor" class="anim-sand-drop"/>
+              <path d="M8.8 19.5c.8-1.4 2-2.2 3.2-2.2s2.4.8 3.2 2.2H8.8Z" fill="currentColor" fill-opacity="0.85"/>
+            </svg>
+          </div>
+          <h2 class="font-bold text-base sm:text-lg text-white">Menunggu Penyelenggara (Admin)</h2>
+          <p class="text-xs sm:text-sm text-slate-400 mt-1 max-w-md mx-auto leading-relaxed">
+            Kuis belum dibuka. Halaman ini otomatis aktif begitu Admin memilih pelaksanaan secara <strong class="text-emerald-300">Mode Bebas</strong> atau <strong class="text-amber-300">Mode Live</strong>.
+          </p>
+        </div>
+
+        <!-- Panel Mode Bebas vs Mode Live + Input Nama Pemain & Tim -->
+        <div id="lobby-input-container" class="hidden max-w-xl mx-auto mb-6 rounded-2xl border border-emerald-500/35 bg-[#0B1120] overflow-hidden">
+          <div id="lobby-mode-panel-header" class="px-5 py-4 border-b border-emerald-500/20 bg-emerald-500/[0.08] flex items-start gap-3">
+            <div class="min-w-0 flex-1">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <h2 id="lobby-mode-panel-title" class="text-sm sm:text-base font-extrabold text-emerald-300">Mode Bebas · Kerjakan Mandiri</h2>
+                <span id="lobby-mode-panel-count" class="text-[11px] font-mono-num text-slate-300">Langsung mulai</span>
+              </div>
+              <p id="lobby-mode-panel-desc" class="text-xs text-slate-300 mt-1 leading-relaxed"></p>
+              <div id="lobby-mode-panel-meta" class="flex flex-wrap items-center gap-2 text-[11px] text-slate-400 mt-2 font-mono-num"></div>
+            </div>
+          </div>
+
+          <div class="p-5 space-y-3.5">
+            <div id="lobby-participation-wrap" class="hidden flex items-center justify-between gap-2 bg-[#131C31] border border-[#23304C] p-1.5 rounded-xl">
+              <button id="btn-part-solo" type="button" onclick="selectTeamChoice('solo')" class="flex-1 py-2 rounded-lg text-xs font-bold cursor-pointer bg-amber-400 text-slate-950">Solo</button>
+              <button id="btn-part-team" type="button" onclick="selectTeamChoice('team')" class="flex-1 py-2 rounded-lg text-xs font-bold cursor-pointer text-slate-300 hover:text-white">Tim / Kru</button>
+            </div>
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <label id="player-name-label" for="player-name" class="block text-xs sm:text-sm font-semibold text-slate-300">Nama Pemain</label>
+                <span id="lobby-replay-hint" class="hidden text-[11px] font-semibold text-emerald-400">Mode Latihan aktif · Boleh main ulang</span>
+              </div>
+              <input id="player-name" type="text" maxlength="20" placeholder="Masukkan namamu di sini..." onkeydown="if(event.key==='Enter') handleLobbyStartClick()"
+                class="w-full px-4 py-3.5 rounded-xl bg-white text-slate-950 font-bold text-base sm:text-lg placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400">
+            </div>
+            <div id="lobby-team-input-wrap" class="hidden">
+              <label for="player-team-name" class="block text-xs sm:text-sm font-semibold text-sky-300 mb-1.5">Nama Tim / Kru Kapal</label>
+              <input id="player-team-name" type="text" maxlength="20" placeholder="Contoh: Garuda / Tim Bajak Laut A" onkeydown="if(event.key==='Enter') handleLobbyStartClick()"
+                class="w-full px-4 py-3 rounded-xl bg-[#131C31] border border-sky-400/50 text-white font-bold text-sm sm:text-base placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-400">
+            </div>
+            <p id="name-error" class="hidden text-rose-400 text-xs mt-1 font-medium" role="alert">Silakan masukkan nama terlebih dahulu.</p>
+          </div>
+        </div>
+
+        <!-- Banner Sudah Selesai -->
+        <div id="already-played-banner" class="hidden bg-[#0B1120] border border-amber-400/30 rounded-xl p-5 text-center mb-6">
+          <div class="w-11 h-11 rounded-full bg-amber-400/15 text-amber-300 flex items-center justify-center mx-auto mb-2.5">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          </div>
+          <h2 class="font-bold text-base sm:text-lg text-amber-300">Kuis Terkunci (Sudah Dikerjakan)</h2>
+          <p id="already-played-info" class="text-xs sm:text-sm text-slate-300 mt-1 max-w-md mx-auto"></p>
+        </div>
+
+        <!-- Aksi Utama Lobby -->
+        <div class="flex flex-col sm:flex-row justify-center gap-3 max-w-xl mx-auto">
+          <button id="btn-start-quiz" type="button" onclick="handleLobbyStartClick()" disabled
+            class="flex-1 bg-slate-800/80 text-slate-400 font-bold text-sm sm:text-base py-3.5 px-6 rounded-xl border border-slate-700 cursor-not-allowed inline-flex items-center justify-center gap-2 whitespace-nowrap">
+            Menunggu Admin...
+          </button>
+          <button id="btn-lobby-leaderboard" type="button" onclick="playPopClickFx(); showLeaderboardFromLobby()"
+            class="hidden arcade-btn bg-[#0B1120] hover:bg-slate-800 text-slate-100 font-semibold text-sm sm:text-base py-3.5 px-5 rounded-xl border border-[#23304C] cursor-pointer inline-flex items-center justify-center gap-2 whitespace-nowrap">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-amber-400" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+            <span>Lihat Leaderboard</span>
+          </button>
+        </div>
       </div>
     </section>
 
     <!-- 2. WAITING ROOM -->
-    <section id="screen-waiting" aria-label="Ruang Tunggu Live" class="hidden relative surface-card rounded-2xl p-6 sm:p-10 shadow-xl text-center">
-      <div class="absolute top-4 right-4 flex items-center gap-2">
-        <button id="btn-waiting-live-lb" type="button" onclick="playPopClickFx(); openLiveLeaderboardModal()" class="hidden arcade-btn px-3 py-2 rounded-lg bg-[#0B1120] border border-[#23304C] text-xs font-bold text-amber-300 hover:bg-slate-800 cursor-pointer">
-          Klasemen
-        </button>
-        <button type="button" onclick="toggleMute()" data-mute-btn="true" aria-label="Bisukan suara efek" title="Bisukan suara efek"
-          class="arcade-btn p-2 rounded-lg bg-[#0B1120] border border-[#23304C] text-slate-200 hover:bg-slate-800 cursor-pointer">
-        </button>
+    <section id="screen-waiting" aria-label="Ruang Tunggu Live" class="hidden relative surface-card border border-amber-400/35 rounded-2xl p-6 sm:p-9 shadow-xl text-center">
+      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-[#23304C] pb-4 mb-6 text-left">
+        <div class="flex flex-wrap items-center gap-2 text-xs text-slate-300 font-mono-num">
+          <span class="font-bold text-amber-300">Ruang Tunggu Live</span>
+          <span class="text-slate-600" aria-hidden="true">·</span>
+          <span id="waiting-room-badge" class="text-sky-300 font-bold">Umum</span>
+          <span class="text-slate-600 hidden sm:inline" aria-hidden="true">·</span>
+          <span id="waiting-gameplay-label" class="hidden sm:inline text-slate-300">Kuis Klasik Serentak</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="btn-waiting-live-lb" type="button" onclick="playPopClickFx(); openLiveLeaderboardModal()" class="hidden arcade-btn px-3 py-2 rounded-lg bg-[#0B1120] border border-[#23304C] text-xs font-bold text-amber-300 hover:bg-slate-800 cursor-pointer">
+            Klasemen
+          </button>
+          <button type="button" onclick="toggleMute()" data-mute-btn="true" aria-label="Bisukan suara efek" title="Bisukan suara efek"
+            class="arcade-btn p-2 rounded-lg bg-[#0B1120] border border-[#23304C] text-slate-200 hover:bg-slate-800 cursor-pointer">
+          </button>
+        </div>
       </div>
       <div class="w-14 h-14 rounded-2xl bg-amber-400/15 border border-amber-400/30 text-amber-300 flex items-center justify-center mx-auto mb-4">
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" class="w-9 h-9">
@@ -223,14 +219,21 @@ export const GOOGLE_SITES_BODY_MARKUP = `<body id="app-body" class="min-h-screen
           <circle cx="12" cy="12" r="3.2" fill="currentColor"/>
         </svg>
       </div>
-      <h2 class="text-xl sm:text-3xl font-extrabold text-white mb-2">Menunggu Admin Memulai Kuis</h2>
-      <p class="text-slate-400 text-xs sm:text-sm max-w-md mx-auto mb-6 leading-relaxed">
-        Kamu masuk ruang tunggu sebagai <strong id="waiting-my-name" class="text-amber-300">Peserta</strong>. Kuis akan dimulai serentak begitu Admin menekan tombol Mulai Live.
+      <h2 class="text-xl sm:text-3xl font-extrabold text-white mb-2">Menunggu Admin Memulai Sesi Live</h2>
+      <p class="text-slate-400 text-xs sm:text-sm max-w-lg mx-auto mb-6 leading-relaxed">
+        Tetap buka halaman ini. Layar pertanyaan akan terbuka secara serentak untuk seluruh peserta segera setelah Admin menekan tombol <strong class="text-amber-300">Mulai Live Sekarang</strong>.
       </p>
+      <div class="max-w-lg mx-auto mb-4 bg-[#0B1120] border border-[#23304C] rounded-xl px-4 py-3 flex flex-wrap items-center justify-between gap-2 text-left text-xs">
+        <div class="min-w-0">
+          <div class="text-[11px] text-slate-400">Identitas Kamu</div>
+          <div id="waiting-my-name" class="font-bold text-white truncate">Peserta</div>
+        </div>
+        <span class="font-mono-num text-[11px] font-bold text-emerald-400">Siap Mulai Serentak</span>
+      </div>
       <div class="bg-[#0B1120] border border-[#23304C] rounded-xl p-4 sm:p-5 max-w-lg mx-auto mb-6 text-left">
         <div class="flex items-center justify-between text-xs font-semibold text-slate-400 mb-3">
-          <span>Peserta di Ruang Tunggu</span>
-          <span id="waiting-count-badge" class="font-mono-num text-emerald-400">0 Bergabung</span>
+          <span>Peserta Standby di Ruang Tunggu</span>
+          <span id="waiting-count-badge" class="font-mono-num text-emerald-400 font-bold">0 Bergabung</span>
         </div>
         <div id="waiting-players-list" class="flex flex-wrap gap-2 max-h-52 overflow-y-auto"></div>
       </div>
@@ -301,8 +304,8 @@ export const GOOGLE_SITES_BODY_MARKUP = `<body id="app-body" class="min-h-screen
       </div>
 
       <!-- Streak & Powerup Bar -->
-      <div class="surface-card rounded-xl p-3 sm:px-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div class="space-y-1.5 min-w-0 flex-1">
+      <div id="quiz-gamification-bar" class="surface-card rounded-xl p-3 sm:px-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div id="quiz-streak-box" class="space-y-1.5 min-w-0 flex-1">
           <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-400">
             <span id="streak-counter-badge" class="inline-flex items-center gap-1 font-bold text-amber-300 shrink-0 font-mono-num">
               <svg id="streak-flame-svg" viewBox="0 0 24 24" fill="none" aria-hidden="true" class="w-4 h-4 text-slate-500">
@@ -317,6 +320,7 @@ export const GOOGLE_SITES_BODY_MARKUP = `<body id="app-body" class="min-h-screen
           </div>
           <div id="streak-segments" class="grid gap-1 max-w-xs" aria-hidden="true"></div>
         </div>
+        <div id="quiz-streak-disabled-note" class="hidden min-w-0 flex-1 text-xs text-slate-300 font-medium"></div>
 
         <div id="powerup-slots-container" class="grid grid-cols-2 gap-2 w-full sm:w-80 shrink-0"></div>
       </div>
@@ -449,7 +453,7 @@ export const GOOGLE_SITES_BODY_MARKUP = `<body id="app-body" class="min-h-screen
       </div>
     </section>
 
-    <!-- 5. ADMIN DASHBOARD (3 Tabs Only) -->
+    <!-- 5. ADMIN DASHBOARD (5 Tabs) -->
     <section id="screen-admin" aria-label="Dashboard Admin" class="hidden surface-card rounded-2xl p-5 sm:p-8 shadow-xl">
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#23304C] pb-5 mb-5">
         <div>
@@ -471,9 +475,11 @@ export const GOOGLE_SITES_BODY_MARKUP = `<body id="app-body" class="min-h-screen
         </div>
       </div>
 
-      <!-- Strictly 3 Tabs -->
-      <div role="tablist" aria-label="Menu Admin" class="flex flex-wrap gap-1.5 p-1 bg-[#0B1120] border border-[#23304C] rounded-xl mb-6">
+      <!-- 5 Tabs -->
+      <div role="tablist" aria-label="Menu Admin" class="flex flex-nowrap overflow-x-auto sm:flex-wrap gap-1.5 p-1 bg-[#0B1120] border border-[#23304C] rounded-xl mb-6">
         <button id="admin-tab-session" type="button" role="tab" aria-selected="true" onclick="switchAdminTab('session')" class="px-3.5 py-2 rounded-lg text-xs font-bold cursor-pointer whitespace-nowrap bg-amber-400 text-slate-950">Kontrol Sesi</button>
+        <button id="admin-tab-gamification" type="button" role="tab" aria-selected="false" onclick="switchAdminTab('gamification')" class="px-3.5 py-2 rounded-lg text-xs font-bold cursor-pointer whitespace-nowrap text-slate-300 hover:text-white">Gamifikasi</button>
+        <button id="admin-tab-settings" type="button" role="tab" aria-selected="false" onclick="switchAdminTab('settings')" class="px-3.5 py-2 rounded-lg text-xs font-bold cursor-pointer whitespace-nowrap text-slate-300 hover:text-white">Pengaturan &amp; Tampilan</button>
         <button id="admin-tab-stats" type="button" role="tab" aria-selected="false" onclick="switchAdminTab('stats')" class="px-3.5 py-2 rounded-lg text-xs font-bold cursor-pointer whitespace-nowrap text-slate-300 hover:text-white">Statistik &amp; Peserta (0)</button>
         <button id="admin-tab-questions" type="button" role="tab" aria-selected="false" onclick="switchAdminTab('questions')" class="px-3.5 py-2 rounded-lg text-xs font-bold cursor-pointer whitespace-nowrap text-slate-300 hover:text-white">Bank Soal (30)</button>
       </div>
@@ -534,143 +540,246 @@ export const GOOGLE_SITES_BODY_MARKUP = `<body id="app-body" class="min-h-screen
           <div id="admin-session-status-banner" class="bg-[#131C31] border border-[#23304C] rounded-lg px-4 py-3 text-xs text-slate-300"></div>
         </div>
 
-        <!-- Monitor Live & Klasemen Leaderboard Live Admin -->
+        <!-- Ruang Tunggu Live & Monitor Live (2 Kolom Seimbang) -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div class="bg-[#0B1120] border border-[#23304C] rounded-xl p-5">
             <div class="flex items-center justify-between gap-2 mb-3">
+              <div id="admin-waiting-title" class="text-sm font-bold text-white">Peserta di Ruang Tunggu Live (0)</div>
+              <span class="text-[11px] font-mono-num text-slate-400">Lobby Live</span>
+            </div>
+            <div id="admin-waiting-list" class="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pr-1"></div>
+          </div>
+
+          <div class="bg-[#0B1120] border border-[#23304C] rounded-xl p-5">
+            <div class="flex items-center justify-between gap-2 mb-3">
               <h3 id="admin-active-count-title" class="text-sm font-bold text-white">Pantau Live: Sedang Mengerjakan (0)</h3>
-              <span class="text-[11px] text-slate-400">Real-time</span>
+              <span class="text-[11px] text-slate-400">Update tiap soal</span>
             </div>
             <div id="admin-active-players-list"></div>
           </div>
+        </div>
 
-          <div class="bg-[#0B1120] border border-amber-400/35 rounded-xl p-5">
-            <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
-              <h3 id="admin-live-lb-title" class="text-sm font-bold text-white">Klasemen Leaderboard Live</h3>
-              <div class="inline-flex items-center gap-1 p-0.5 bg-[#131C31] border border-[#23304C] rounded-lg">
-                <button id="admin-lb-tab-ind" type="button" onclick="switchAdminLbTab('individual')" class="px-2.5 py-1 rounded text-[11px] font-bold cursor-pointer bg-amber-400 text-slate-950">Individu</button>
-                <button id="admin-lb-tab-team" type="button" onclick="switchAdminLbTab('team')" class="px-2.5 py-1 rounded text-[11px] font-bold cursor-pointer text-slate-300 hover:text-white">Tim</button>
-              </div>
+        <!-- Klasemen Leaderboard Live Admin -->
+        <div class="bg-[#0B1120] border border-[#23304C] rounded-xl p-5">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <h3 id="admin-live-lb-title" class="text-sm font-bold text-white">Klasemen Leaderboard Live</h3>
+            <div class="inline-flex items-center gap-1 p-1 bg-[#131C31] border border-[#23304C] rounded-lg">
+              <button id="admin-lb-tab-ind" type="button" onclick="switchAdminLbTab('individual')" class="px-2.5 py-1 rounded text-[11px] font-bold cursor-pointer bg-amber-400 text-slate-950">Individu</button>
+              <button id="admin-lb-tab-team" type="button" onclick="switchAdminLbTab('team')" class="px-2.5 py-1 rounded text-[11px] font-bold cursor-pointer text-slate-300 hover:text-white">Tim</button>
             </div>
-            <div id="admin-live-lb-list" class="max-h-48 overflow-y-auto space-y-1.5 pr-1"></div>
+          </div>
+          <div id="admin-live-lb-list" class="max-h-56 overflow-y-auto space-y-1.5 pr-1"></div>
+        </div>
+      </div>
+
+      <!-- TAB 2: GAMIFIKASI -->
+      <div id="admin-panel-gamification" class="hidden space-y-5">
+        <div class="bg-[#0B1120] border border-[#23304C] rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div class="space-y-1">
+            <div class="flex flex-wrap items-center gap-2">
+              <h3 class="text-base font-bold text-white">Aktifkan Fitur Gamifikasi</h3>
+              <span id="admin-gamification-status-badge" class="px-2 py-0.5 rounded-md text-[11px] font-extrabold border bg-emerald-500/15 border-emerald-400/35 text-emerald-300">Aktif</span>
+            </div>
+            <p id="admin-gamification-status-desc" class="text-xs text-slate-400 leading-relaxed max-w-2xl">
+              Pemain mendapatkan Streak kombo, Buff (Skor 2x, 50:50, Perisai), serta Debuff serangan lawan (Bekukan #1, Acak Opsi, Puting Beliung) saat kuis berlangsung.
+            </p>
+          </div>
+          <button id="setting-gamification-enabled" type="button" role="switch" aria-checked="true" aria-label="Aktifkan Fitur Gamifikasi" onclick="adminToggleGamification()" class="arcade-btn px-4 py-2.5 rounded-lg text-xs font-extrabold border inline-flex items-center gap-2.5 cursor-pointer shrink-0 whitespace-nowrap bg-emerald-400 hover:bg-emerald-300 text-slate-950 border-emerald-300">
+            <span id="admin-gamification-switch-track" class="w-8 h-4 rounded-full p-0.5 transition-colors inline-flex items-center bg-slate-950/30 justify-end">
+              <span class="w-3 h-3 rounded-full bg-white shadow"></span>
+            </span>
+            <span id="admin-gamification-switch-text">Gamifikasi ON</span>
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div class="bg-[#0B1120] border border-[#23304C] rounded-xl p-5 space-y-3">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-sm font-bold text-white">Mode Gameplay</span>
+              <span id="admin-voyage-island-badge" class="text-[11px] font-mono-num text-sky-300 font-bold"></span>
+            </div>
+            <div class="grid grid-cols-2 gap-2.5">
+              <button id="btn-gameplay-classic" type="button" onclick="adminSetGameplayMode('classic')" class="px-3.5 py-2.5 rounded-lg text-xs font-bold border cursor-pointer bg-amber-400 text-slate-950 border-amber-300">Kuis Klasik</button>
+              <button id="btn-gameplay-voyage" type="button" onclick="adminSetGameplayMode('voyage')" class="px-3.5 py-2.5 rounded-lg text-xs font-bold border cursor-pointer bg-[#131C31] text-slate-300 border-[#23304C]">Berlayar Harta Karun</button>
+            </div>
+            <p id="admin-gameplay-gamification-note" class="text-xs text-slate-400 leading-relaxed">
+              Pada mode Berlayar Harta Karun, setiap 5 soal kapal berlayar 3 langkah dan berlabuh di pulau minigame untuk meraih Buff atau Debuff.
+            </p>
+          </div>
+
+          <div id="admin-part-card" class="bg-[#0B1120] border border-[#23304C] rounded-xl p-5 space-y-3 transition-opacity">
+            <div class="flex items-center justify-between gap-2">
+              <div class="text-sm font-bold text-white">Kepesertaan (Solo / Tim)</div>
+              <span id="admin-part-scope-note" class="text-[11px] font-mono-num text-slate-400">Khusus Mode Berlayar</span>
+            </div>
+            <div class="grid grid-cols-3 gap-2">
+              <button id="btn-part-mode-either" type="button" onclick="adminSetParticipationMode('either')" class="px-3 py-2.5 rounded-lg text-xs font-bold border cursor-pointer bg-emerald-400 text-slate-950 border-emerald-300">Bebas</button>
+              <button id="btn-part-mode-solo" type="button" onclick="adminSetParticipationMode('solo')" class="px-3 py-2.5 rounded-lg text-xs font-bold border cursor-pointer bg-[#131C31] text-slate-300 border-[#23304C]">Solo Saja</button>
+              <button id="btn-part-mode-team" type="button" onclick="adminSetParticipationMode('team')" class="px-3 py-2.5 rounded-lg text-xs font-bold border cursor-pointer bg-[#131C31] text-slate-300 border-[#23304C]">Tim Saja</button>
+            </div>
+            <p id="admin-part-desc" class="text-xs text-slate-400 leading-relaxed">
+              Saat memakai Kuis Klasik, seluruh peserta otomatis bermain individu dan pilihan Solo / Tim disembunyikan dari beranda.
+            </p>
           </div>
         </div>
 
-        <!-- Pengaturan Kuis + Gameplay + Timer Global -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div class="bg-[#0B1120] border border-[#23304C] rounded-xl p-5 space-y-3">
-            <div class="text-sm font-bold text-white">Mode Gameplay, Timer &amp; Tampilan</div>
-
-            <div class="p-3 rounded-lg bg-[#131C31] border border-[#23304C] space-y-2">
-              <div class="flex items-center justify-between gap-2">
-                <span class="text-xs font-bold text-white">Mode Gameplay</span>
-                <span id="admin-voyage-island-badge" class="text-[11px] font-mono-num text-cyan-300 font-bold"></span>
-              </div>
-              <div class="grid grid-cols-2 gap-2">
-                <button id="btn-gameplay-classic" type="button" onclick="adminSetGameplayMode('classic')" class="px-3 py-2 rounded-lg text-xs font-bold border cursor-pointer bg-amber-400 text-slate-950 border-amber-300">Kuis Klasik</button>
-                <button id="btn-gameplay-voyage" type="button" onclick="adminSetGameplayMode('voyage')" class="px-3 py-2 rounded-lg text-xs font-bold border cursor-pointer bg-[#0B1120] text-slate-200 border-[#23304C]">Berlayar Harta Karun</button>
-              </div>
-            </div>
-
-            <div class="p-3 rounded-lg bg-[#131C31] border border-[#23304C] space-y-2">
-              <div class="text-xs font-bold text-white">Kepesertaan</div>
-              <div class="grid grid-cols-3 gap-1.5">
-                <button id="btn-part-mode-either" type="button" onclick="adminSetParticipationMode('either')" class="px-2 py-1.5 rounded-lg text-[11px] font-bold border cursor-pointer bg-amber-400 text-slate-950 border-amber-300">Bebas</button>
-                <button id="btn-part-mode-solo" type="button" onclick="adminSetParticipationMode('solo')" class="px-2 py-1.5 rounded-lg text-[11px] font-bold border cursor-pointer bg-[#0B1120] text-slate-200 border-[#23304C]">Solo Saja</button>
-                <button id="btn-part-mode-team" type="button" onclick="adminSetParticipationMode('team')" class="px-2 py-1.5 rounded-lg text-[11px] font-bold border cursor-pointer bg-[#0B1120] text-slate-200 border-[#23304C]">Tim Saja</button>
-              </div>
-            </div>
-
-            <div class="p-3 rounded-lg bg-[#131C31] border border-[#23304C] space-y-2">
-              <div class="flex items-center justify-between gap-2">
-                <span class="text-xs font-bold text-white">Timer Kuis Global (Menit)</span>
-                <span id="admin-timer-mode-badge" class="text-[11px] font-bold text-slate-400">Per-Soal</span>
-              </div>
-              <div class="flex flex-wrap gap-1.5">
-                <button type="button" onclick="adminSetDurationMinutes(0)" class="px-2.5 py-1 rounded bg-[#0B1120] hover:bg-slate-800 border border-[#23304C] text-[11px] font-bold text-slate-200 cursor-pointer">Per-Soal (0)</button>
-                <button type="button" onclick="adminSetDurationMinutes(15)" class="px-2.5 py-1 rounded bg-[#0B1120] hover:bg-slate-800 border border-[#23304C] text-[11px] font-bold text-slate-200 cursor-pointer">15m</button>
-                <button type="button" onclick="adminSetDurationMinutes(30)" class="px-2.5 py-1 rounded bg-[#0B1120] hover:bg-slate-800 border border-[#23304C] text-[11px] font-bold text-amber-300 cursor-pointer">30m</button>
-                <button type="button" onclick="adminSetDurationMinutes(45)" class="px-2.5 py-1 rounded bg-[#0B1120] hover:bg-slate-800 border border-[#23304C] text-[11px] font-bold text-slate-200 cursor-pointer">45m</button>
-                <button type="button" onclick="adminSetDurationMinutes(60)" class="px-2.5 py-1 rounded bg-[#0B1120] hover:bg-slate-800 border border-[#23304C] text-[11px] font-bold text-slate-200 cursor-pointer">60m</button>
-              </div>
-              <div class="flex items-center gap-1.5 pt-1">
-                <input id="setting-quiz-duration" type="number" min="0" max="180" value="0" class="w-20 px-2.5 py-1.5 rounded bg-[#0B1120] border border-[#23304C] text-white text-xs font-mono-num font-bold text-center">
-                <button type="button" onclick="adminApplyDurationCustom()" class="bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-xs px-3 py-1.5 rounded cursor-pointer">Simpan Timer</button>
-              </div>
-            </div>
-
-            <label class="flex items-start justify-between gap-3 cursor-pointer p-2.5 rounded-lg bg-[#131C31] border border-[#23304C]">
-              <div>
-                <div class="text-xs font-bold text-white">Tampilkan Leaderboard Live ke Pemain</div>
-                <div class="text-[11px] text-slate-400">Menambahkan tombol Klasemen di layar tunggu &amp; kuis peserta.</div>
-              </div>
-              <input id="setting-show-live-lb" type="checkbox" onchange="adminToggleSetting('showLiveLeaderboardToPlayers', this.checked)" class="mt-1 accent-amber-400 w-4 h-4 cursor-pointer">
-            </label>
-
-            <label class="flex items-start justify-between gap-3 cursor-pointer p-2.5 rounded-lg bg-[#131C31] border border-[#23304C]">
-              <div>
-                <div class="text-xs font-bold text-white">Mode Latihan (Boleh Main Ulang)</div>
-                <div class="text-[11px] text-slate-400">Buka kunci 1x per perangkat agar peserta bisa mengulang kuis.</div>
-              </div>
-              <input id="setting-allow-replay" type="checkbox" onchange="adminToggleSetting('allowReplay', this.checked)" class="mt-1 accent-amber-400 w-4 h-4 cursor-pointer">
-            </label>
-
-            <label class="flex items-start justify-between gap-3 cursor-pointer p-2.5 rounded-lg bg-[#131C31] border border-[#23304C]">
-              <div>
-                <div class="text-xs font-bold text-white">Acak Urutan Soal per Pemain</div>
-                <div class="text-[11px] text-slate-400">Mencegah saling contek urutan nomor antar peserta.</div>
-              </div>
-              <input id="setting-shuffle-questions" type="checkbox" onchange="adminToggleSetting('shuffleQuestions', this.checked)" class="mt-1 accent-amber-400 w-4 h-4 cursor-pointer">
-            </label>
-
-            <label class="flex items-start justify-between gap-3 cursor-pointer p-2.5 rounded-lg bg-[#131C31] border border-[#23304C]">
-              <div>
-                <div class="text-xs font-bold text-white">Acak Posisi Opsi A–D</div>
-                <div class="text-[11px] text-slate-400">Posisi opsi pilihan ganda &amp; multi-pilih diacak otomatis.</div>
-              </div>
-              <input id="setting-shuffle-options" type="checkbox" onchange="adminToggleSetting('shuffleOptions', this.checked)" class="mt-1 accent-amber-400 w-4 h-4 cursor-pointer">
-            </label>
-
-            <label class="flex items-start justify-between gap-3 cursor-pointer p-2.5 rounded-lg bg-[#131C31] border border-[#23304C]">
-              <div>
-                <div class="text-xs font-bold text-white">Mode Ringkas (Embed Google Sites)</div>
-                <div class="text-[11px] text-slate-400">Menghemat padding vertikal untuk bingkai situs sempit.</div>
-              </div>
-              <input id="setting-compact-mode" type="checkbox" onchange="adminToggleSetting('compactMode', this.checked)" class="mt-1 accent-amber-400 w-4 h-4 cursor-pointer">
-            </label>
-
-            <div class="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-[#131C31] border border-[#23304C]">
-              <div>
-                <label for="setting-question-limit" class="text-xs font-bold text-white block">Batas Jumlah Soal / Sesi</label>
-                <span id="setting-limit-hint" class="text-[11px] text-slate-400">Isi 0 untuk memakai semua soal.</span>
-              </div>
-              <div class="flex items-center gap-1.5">
-                <input id="setting-question-limit" type="number" min="0" max="200" value="0" class="w-16 px-2.5 py-1.5 rounded bg-[#0B1120] border border-[#23304C] text-white text-xs font-mono-num font-bold text-center">
-                <button type="button" onclick="adminApplyQuestionLimit()" class="bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-xs px-3 py-1.5 rounded cursor-pointer">Terapkan</button>
-              </div>
+        <div class="bg-[#0B1120] border border-[#23304C] rounded-xl p-5 space-y-4">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <h3 id="admin-gamification-catalog-title" class="text-sm font-bold text-white">Pilih Fitur Buff &amp; Debuff (6/6 Aktif)</h3>
+            <div class="flex flex-wrap items-center gap-2 text-[11px] font-mono-num">
+              <span id="admin-gamification-streak-rule" class="px-2 py-0.5 rounded bg-[#131C31] border border-[#23304C] text-amber-300">Streak: 8 benar</span>
+              <span id="admin-gamification-debuff-rule" class="px-2 py-0.5 rounded bg-[#131C31] border border-[#23304C] text-sky-300">Drop Debuff: #10, #15, #20, #30</span>
             </div>
           </div>
 
-          <div class="space-y-4">
-            <div class="bg-[#0B1120] border border-[#23304C] rounded-xl p-5 space-y-3">
-              <div class="text-sm font-bold text-white">Ubah PIN Admin</div>
-              <div class="flex gap-2">
-                <input id="admin-change-pin-input" type="text" maxlength="10" placeholder="Minimal 4 karakter" class="flex-1 px-3 py-2 rounded-lg bg-[#131C31] border border-[#23304C] text-white font-mono-num font-bold text-xs tracking-widest">
-                <button type="button" onclick="adminSaveNewPin()" class="bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-xs px-4 py-2 rounded-lg cursor-pointer">Simpan PIN</button>
-              </div>
-            </div>
-
-            <div class="bg-[#0B1120] border border-[#23304C] rounded-xl p-5 space-y-3">
+          <div id="admin-gamification-mechanics-row" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 transition-opacity">
+            <button id="setting-streak-enabled" type="button" role="switch" aria-checked="true" onclick="adminToggleGamificationMechanic('streakEnabled')" class="p-3 rounded-xl border text-left flex items-center justify-between gap-3 cursor-pointer bg-amber-400/10 border-amber-400/35">
               <div>
-                <div id="admin-waiting-title" class="text-sm font-bold text-white">Peserta di Ruang Tunggu Live (0)</div>
-                <div id="admin-waiting-list" class="flex flex-wrap gap-1.5 mt-2"></div>
+                <div id="setting-streak-title" class="text-xs font-bold text-white">Hadiah Streak Benar</div>
+                <div class="text-[11px] text-slate-400 mt-0.5">Beri Buff/Debuff aktif setiap menjawab benar beruntun.</div>
               </div>
-              <div class="pt-2 border-t border-[#23304C]">
-                <button type="button" onclick="askResetDefaultQuestions()" class="w-full bg-[#131C31] hover:bg-slate-800 text-amber-300 border border-[#23304C] font-bold text-xs px-4 py-2.5 rounded-lg cursor-pointer whitespace-nowrap">
-                  Muat Ulang 30 Soal Default
-                </button>
+              <span id="setting-streak-badge" class="px-2 py-0.5 rounded text-[11px] font-mono-num font-extrabold shrink-0 bg-emerald-500/20 text-emerald-300">ON</span>
+            </button>
+            <button id="setting-milestone-drops-enabled" type="button" role="switch" aria-checked="true" onclick="adminToggleGamificationMechanic('milestoneDropsEnabled')" class="p-3 rounded-xl border text-left flex items-center justify-between gap-3 cursor-pointer bg-sky-400/10 border-sky-400/35">
+              <div>
+                <div class="text-xs font-bold text-white">Drop Debuff Milestone Soal</div>
+                <div id="setting-milestone-desc" class="text-[11px] text-slate-400 mt-0.5">Beri Debuff acak di tengah kuis agar persaingan seru.</div>
               </div>
+              <span id="setting-milestone-badge" class="px-2 py-0.5 rounded text-[11px] font-mono-num font-extrabold shrink-0 bg-emerald-500/20 text-emerald-300">ON</span>
+            </button>
+          </div>
+
+          <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+            <span class="text-xs text-slate-400">Klik item di bawah untuk menyalakan/mematikan satu per satu, atau pilih cepat:</span>
+            <div id="admin-gamification-presets" class="flex flex-wrap items-center gap-1.5">
+              <button type="button" data-preset="all" onclick="adminApplyPowerupPreset('all')" class="px-2.5 py-1 rounded-lg text-[11px] font-bold border cursor-pointer bg-amber-400 text-slate-950 border-amber-300">Semua (6)</button>
+              <button type="button" data-preset="buffs" onclick="adminApplyPowerupPreset('buffs')" class="px-2.5 py-1 rounded-lg text-[11px] font-bold border cursor-pointer bg-[#131C31] hover:bg-slate-800 text-slate-200 border-[#23304C]">Buff Saja</button>
+              <button type="button" data-preset="double" onclick="adminApplyPowerupPreset('double')" class="px-2.5 py-1 rounded-lg text-[11px] font-bold border cursor-pointer bg-[#131C31] hover:bg-slate-800 text-slate-200 border-[#23304C]">Hanya Skor 2x</button>
+              <button type="button" data-preset="none" onclick="adminApplyPowerupPreset('none')" class="px-2.5 py-1 rounded-lg text-[11px] font-bold border cursor-pointer bg-[#131C31] hover:bg-slate-800 text-slate-200 border-[#23304C]">Kosongkan</button>
             </div>
+          </div>
+
+          <div id="admin-gamification-catalog-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 transition-opacity"></div>
+        </div>
+      </div>
+
+      <!-- TAB 3: PENGATURAN & TAMPILAN -->
+      <div id="admin-panel-settings" class="hidden grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="bg-[#0B1120] border border-[#23304C] rounded-xl p-5 space-y-3">
+          <div class="text-sm font-bold text-white">Pengaturan Kuis, Timer &amp; Tampilan</div>
+
+          <div class="p-3 rounded-lg bg-[#131C31] border border-[#23304C] space-y-2">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-xs font-bold text-white">Timer Kuis Global (Menit)</span>
+              <span id="admin-timer-mode-badge" class="text-[11px] font-mono-num font-bold text-slate-400">Per-Soal</span>
+            </div>
+            <div class="flex flex-wrap gap-1.5">
+              <button type="button" onclick="adminSetDurationMinutes(0)" class="px-2.5 py-1 rounded bg-[#0B1120] hover:bg-slate-800 border border-[#23304C] text-[11px] font-mono-num font-bold text-slate-200 cursor-pointer">Per-Soal (0)</button>
+              <button type="button" onclick="adminSetDurationMinutes(15)" class="px-2.5 py-1 rounded bg-[#0B1120] hover:bg-slate-800 border border-[#23304C] text-[11px] font-mono-num font-bold text-slate-200 cursor-pointer">15m</button>
+              <button type="button" onclick="adminSetDurationMinutes(30)" class="px-2.5 py-1 rounded bg-[#0B1120] hover:bg-slate-800 border border-[#23304C] text-[11px] font-mono-num font-bold text-amber-300 cursor-pointer">30m</button>
+              <button type="button" onclick="adminSetDurationMinutes(45)" class="px-2.5 py-1 rounded bg-[#0B1120] hover:bg-slate-800 border border-[#23304C] text-[11px] font-mono-num font-bold text-slate-200 cursor-pointer">45m</button>
+              <button type="button" onclick="adminSetDurationMinutes(60)" class="px-2.5 py-1 rounded bg-[#0B1120] hover:bg-slate-800 border border-[#23304C] text-[11px] font-mono-num font-bold text-slate-200 cursor-pointer">60m</button>
+            </div>
+            <div class="flex items-center gap-1.5 pt-1">
+              <input id="setting-quiz-duration" type="number" min="0" max="180" value="0" class="w-20 px-2.5 py-1.5 rounded bg-[#0B1120] border border-[#23304C] text-white text-xs font-mono-num font-bold text-center">
+              <button type="button" onclick="adminApplyDurationCustom()" class="bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-xs px-3 py-1.5 rounded cursor-pointer">Simpan Timer</button>
+            </div>
+          </div>
+
+          <label class="flex items-start justify-between gap-3 cursor-pointer p-2.5 rounded-lg bg-[#131C31] border border-[#23304C]">
+            <div>
+              <div class="text-xs font-bold text-white">Tampilkan Leaderboard Live ke Pemain</div>
+              <div class="text-[11px] text-slate-400">Menambahkan tombol Klasemen di layar tunggu &amp; kuis peserta.</div>
+            </div>
+            <input id="setting-show-live-lb" type="checkbox" onchange="adminToggleSetting('showLiveLeaderboardToPlayers', this.checked)" class="mt-1 accent-amber-400 w-4 h-4 cursor-pointer">
+          </label>
+
+          <label class="flex items-start justify-between gap-3 cursor-pointer p-2.5 rounded-lg bg-[#131C31] border border-[#23304C]">
+            <div>
+              <div class="text-xs font-bold text-white">Mode Latihan (Boleh Main Ulang)</div>
+              <div class="text-[11px] text-slate-400">Buka kunci 1x per perangkat agar peserta bisa mengulang kuis.</div>
+            </div>
+            <input id="setting-allow-replay" type="checkbox" onchange="adminToggleSetting('allowReplay', this.checked)" class="mt-1 accent-amber-400 w-4 h-4 cursor-pointer">
+          </label>
+
+          <label class="flex items-start justify-between gap-3 cursor-pointer p-2.5 rounded-lg bg-[#131C31] border border-[#23304C]">
+            <div>
+              <div class="text-xs font-bold text-white">Acak Urutan Soal per Pemain</div>
+              <div class="text-[11px] text-slate-400">Mencegah saling contek urutan nomor antar peserta.</div>
+            </div>
+            <input id="setting-shuffle-questions" type="checkbox" onchange="adminToggleSetting('shuffleQuestions', this.checked)" class="mt-1 accent-amber-400 w-4 h-4 cursor-pointer">
+          </label>
+
+          <label class="flex items-start justify-between gap-3 cursor-pointer p-2.5 rounded-lg bg-[#131C31] border border-[#23304C]">
+            <div>
+              <div class="text-xs font-bold text-white">Acak Posisi Opsi A–D</div>
+              <div class="text-[11px] text-slate-400">Posisi opsi pilihan ganda &amp; multi-pilih diacak otomatis.</div>
+            </div>
+            <input id="setting-shuffle-options" type="checkbox" onchange="adminToggleSetting('shuffleOptions', this.checked)" class="mt-1 accent-amber-400 w-4 h-4 cursor-pointer">
+          </label>
+
+          <label class="flex items-start justify-between gap-3 cursor-pointer p-2.5 rounded-lg bg-[#131C31] border border-[#23304C]">
+            <div>
+              <div class="text-xs font-bold text-white">Mode Ringkas (Embed Google Sites)</div>
+              <div class="text-[11px] text-slate-400">Menghemat padding vertikal untuk bingkai situs sempit.</div>
+            </div>
+            <input id="setting-compact-mode" type="checkbox" onchange="adminToggleSetting('compactMode', this.checked)" class="mt-1 accent-amber-400 w-4 h-4 cursor-pointer">
+          </label>
+
+          <div class="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-[#131C31] border border-[#23304C]">
+            <div>
+              <label for="setting-question-limit" class="text-xs font-bold text-white block">Batas Jumlah Soal / Sesi</label>
+              <span id="setting-limit-hint" class="text-[11px] text-slate-400">Isi 0 untuk memakai semua soal.</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <input id="setting-question-limit" type="number" min="0" max="200" value="0" class="w-16 px-2.5 py-1.5 rounded bg-[#0B1120] border border-[#23304C] text-white text-xs font-mono-num font-bold text-center">
+              <button type="button" onclick="adminApplyQuestionLimit()" class="bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-xs px-3 py-1.5 rounded cursor-pointer">Terapkan</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="space-y-4">
+          <div class="bg-[#0B1120] border border-[#23304C] rounded-xl p-5 space-y-3">
+            <div class="text-sm font-bold text-white">Ubah PIN Admin</div>
+            <p class="text-xs text-slate-400 leading-relaxed">PIN ini digunakan untuk membuka Panel Penyelenggara di ruangan aktif saat ini.</p>
+            <div class="flex gap-2">
+              <input id="admin-change-pin-input" type="text" maxlength="10" placeholder="Minimal 4 karakter" class="flex-1 px-3 py-2 rounded-lg bg-[#131C31] border border-[#23304C] text-white font-mono-num font-bold text-xs tracking-widest">
+              <button type="button" onclick="adminSaveNewPin()" class="bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-xs px-4 py-2 rounded-lg cursor-pointer whitespace-nowrap">Simpan PIN</button>
+            </div>
+          </div>
+
+          <div class="bg-[#0B1120] border border-[#23304C] rounded-xl p-5 space-y-3">
+            <div class="text-sm font-bold text-white">Pemulihan Bank Soal Bawaan</div>
+            <p class="text-xs text-slate-400 leading-relaxed">Kembalikan daftar soal pada ruangan aktif menjadi 30 soal trivia Nusantara bawaan apabila ingin memulai ulang materi.</p>
+            <button type="button" onclick="askResetDefaultQuestions()" class="w-full bg-[#131C31] hover:bg-slate-800 text-amber-300 border border-[#23304C] font-bold text-xs px-4 py-2.5 rounded-lg cursor-pointer whitespace-nowrap">
+              Muat Ulang 30 Soal Default
+            </button>
+          </div>
+
+          <div class="bg-[#0B1120] border border-[#23304C] rounded-xl p-5 space-y-2.5">
+            <div class="text-sm font-bold text-white">Ringkasan Konfigurasi Aktif</div>
+            <dl class="divide-y divide-[#23304C]/70 text-xs">
+              <div class="py-2 flex items-center justify-between gap-2">
+                <dt class="text-slate-400">Ruang Aktif</dt>
+                <dd id="admin-summary-room" class="font-mono-num font-bold text-sky-300">UMUM</dd>
+              </div>
+              <div class="py-2 flex items-center justify-between gap-2">
+                <dt class="text-slate-400">Fitur Gamifikasi</dt>
+                <dd id="admin-summary-gamification" class="font-mono-num font-bold text-emerald-400">Aktif</dd>
+              </div>
+              <div class="py-2 flex items-center justify-between gap-2">
+                <dt class="text-slate-400">Mode Gameplay</dt>
+                <dd id="admin-summary-gameplay" class="font-mono-num font-bold text-white">Kuis Klasik</dd>
+              </div>
+              <div class="py-2 flex items-center justify-between gap-2">
+                <dt class="text-slate-400">Timer Kuis</dt>
+                <dd id="admin-summary-timer" class="font-mono-num font-bold text-amber-300">Per-Soal</dd>
+              </div>
+              <div class="py-2 flex items-center justify-between gap-2">
+                <dt class="text-slate-400">Tampilan &amp; Soal</dt>
+                <dd id="admin-summary-display" class="font-mono-num font-bold text-slate-200 text-right">30 Soal · Normal</dd>
+              </div>
+            </dl>
           </div>
         </div>
       </div>

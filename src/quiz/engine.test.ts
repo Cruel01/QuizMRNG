@@ -10,18 +10,29 @@ import {
   formatCountdownClock,
   generateDefaultRoomCode,
   getDebuffMilestones,
+  getEffectiveParticipationMode,
+  getEnabledPowerups,
   getSessionLockFlags,
   getStreakRewardTarget,
   getVoyageProgressState,
   grantPowerupToSlots,
+  isGamificationActive,
   isGlobalQuizTimerActive,
+  isMilestoneDropActive,
+  isPowerupEnabled,
+  isStreakRewardActive,
+  isTeamParticipationAvailable,
   mergeLiveAndFinishedLeaderboard,
+  parseClassGateInput,
   pickSabotageTarget,
+  rollAllowedPowerup,
+  rollIslandRewardPowerup,
   rollWeightedPowerup,
   sanitizeRoomCode,
   STALE_ACTIVE_PLAYER_MS,
+  togglePowerupInList,
 } from './engine';
-import { DEFAULT_QUESTIONS } from './questions';
+import { ALL_POWERUP_IDS, DEFAULT_QUESTIONS } from './questions';
 import { generateGoogleSitesHtml } from './googleSitesExport';
 import {
   buildQuestionCsvTemplate,
@@ -71,6 +82,97 @@ test('isGlobalQuizTimerActive & formatCountdownClock behave accurately', () => {
   assert.equal(formatCountdownClock(1800), '30:00');
   assert.equal(formatCountdownClock(65), '01:05');
   assert.equal(formatCountdownClock(-5), '00:00');
+});
+
+test('isGamificationActive defaults to true and respects explicit false', () => {
+  assert.equal(isGamificationActive(undefined), true);
+  assert.equal(isGamificationActive(null), true);
+  assert.equal(isGamificationActive({ gamificationEnabled: true }), true);
+  assert.equal(isGamificationActive({ gamificationEnabled: false }), false);
+});
+
+test('selective gamification controls filter enabled powerups, streak rewards, milestone drops, and island rewards', () => {
+  assert.deepEqual(getEnabledPowerups(undefined), ALL_POWERUP_IDS);
+  assert.deepEqual(getEnabledPowerups({ gamificationEnabled: false, enabledPowerups: ['DOUBLE_SCORE'] }), []);
+  assert.deepEqual(getEnabledPowerups({ gamificationEnabled: true, enabledPowerups: ['DOUBLE_SCORE'] }), ['DOUBLE_SCORE']);
+  assert.deepEqual(getEnabledPowerups({ gamificationEnabled: true, enabledPowerups: [] }), []);
+  // Ignores unknown/invalid IDs safely
+  assert.deepEqual(
+    getEnabledPowerups({
+      gamificationEnabled: true,
+      enabledPowerups: ['DOUBLE_SCORE', 'UNKNOWN_POWERUP' as unknown as 'DOUBLE_SCORE'],
+    }),
+    ['DOUBLE_SCORE']
+  );
+
+  assert.equal(isPowerupEnabled({ gamificationEnabled: true, enabledPowerups: ['DOUBLE_SCORE'] }, 'DOUBLE_SCORE'), true);
+  assert.equal(isPowerupEnabled({ gamificationEnabled: true, enabledPowerups: ['DOUBLE_SCORE'] }, 'TORNADO'), false);
+
+  assert.equal(isStreakRewardActive({ gamificationEnabled: true, enabledPowerups: ['DOUBLE_SCORE'], streakEnabled: true }), true);
+  assert.equal(isStreakRewardActive({ gamificationEnabled: true, enabledPowerups: ['DOUBLE_SCORE'], streakEnabled: false }), false);
+  assert.equal(isStreakRewardActive({ gamificationEnabled: true, enabledPowerups: [], streakEnabled: true }), false);
+
+  // Milestone drops require at least one enabled debuff AND milestoneDropsEnabled !== false
+  assert.equal(isMilestoneDropActive({ gamificationEnabled: true, enabledPowerups: ['DOUBLE_SCORE'], milestoneDropsEnabled: true }), false);
+  assert.equal(isMilestoneDropActive({ gamificationEnabled: true, enabledPowerups: ['DOUBLE_SCORE', 'TORNADO'], milestoneDropsEnabled: true }), true);
+  assert.equal(isMilestoneDropActive({ gamificationEnabled: true, enabledPowerups: ['DOUBLE_SCORE', 'TORNADO'], milestoneDropsEnabled: false }), false);
+
+  // Rolling strictly respects enabledPowerups
+  assert.equal(rollAllowedPowerup(null, ['DOUBLE_SCORE'], () => 0.99), 'DOUBLE_SCORE');
+  assert.equal(rollAllowedPowerup('debuff', ['DOUBLE_SCORE'], () => 0.5), null);
+  assert.equal(rollAllowedPowerup(null, [], () => 0.5), null);
+  assert.equal(rollIslandRewardPowerup(true, ['DOUBLE_SCORE'], true, () => 0.1), 'DOUBLE_SCORE');
+  assert.equal(rollIslandRewardPowerup(false, ['DOUBLE_SCORE'], true, () => 0.1), null);
+  assert.equal(rollIslandRewardPowerup(true, [], false, () => 0.5), null);
+
+  // togglePowerupInList maintains canonical order
+  const toggledOff = togglePowerupInList([...ALL_POWERUP_IDS], 'FIFTY_FIFTY');
+  assert.ok(!toggledOff.includes('FIFTY_FIFTY'));
+  const toggledOn = togglePowerupInList(toggledOff, 'FIFTY_FIFTY');
+  assert.deepEqual(toggledOn, ALL_POWERUP_IDS);
+});
+
+test('isTeamParticipationAvailable & getEffectiveParticipationMode restrict teams strictly to voyage mode', () => {
+  assert.equal(isTeamParticipationAvailable(undefined), false);
+  assert.equal(isTeamParticipationAvailable({ gameplayMode: 'classic' }), false);
+  assert.equal(isTeamParticipationAvailable({ gameplayMode: 'voyage' }), true);
+
+  assert.equal(
+    getEffectiveParticipationMode({ gameplayMode: 'classic', participationMode: 'team' }),
+    'solo'
+  );
+  assert.equal(
+    getEffectiveParticipationMode({ gameplayMode: 'classic', participationMode: 'either' }),
+    'solo'
+  );
+  assert.equal(
+    getEffectiveParticipationMode({ gameplayMode: 'voyage', participationMode: 'team' }),
+    'team'
+  );
+  assert.equal(
+    getEffectiveParticipationMode({ gameplayMode: 'voyage', participationMode: 'either' }),
+    'either'
+  );
+});
+
+test('parseClassGateInput validates codes, maps UMUM/DEFAULT to empty room, and sanitizes custom codes', () => {
+  const emptyRes = parseClassGateInput('   ');
+  assert.equal(emptyRes.valid, false);
+  assert.ok(emptyRes.error && emptyRes.error.length > 0);
+
+  const umumRes = parseClassGateInput('umum');
+  assert.equal(umumRes.valid, true);
+  assert.equal(umumRes.roomCode, '');
+  assert.equal(umumRes.displayLabel, 'Umum');
+
+  const defaultRes = parseClassGateInput('default');
+  assert.equal(defaultRes.valid, true);
+  assert.equal(defaultRes.roomCode, '');
+
+  const customRes = parseClassGateInput(' kelas 8a! ');
+  assert.equal(customRes.valid, true);
+  assert.equal(customRes.roomCode, 'KELAS8A');
+  assert.equal(customRes.displayLabel, '#KELAS8A');
 });
 
 test('buildVoyageCheckpoints scales islands cleanly as totalQuestions / 5', () => {
@@ -329,6 +431,7 @@ test('generateGoogleSitesHtml embeds current questions, Voyage/Timer/Tornado par
       gameplayMode: 'voyage',
       participationMode: 'either',
       showLiveLeaderboardToPlayers: true,
+      gamificationEnabled: true,
     },
     'KELAS8A'
   );
@@ -374,13 +477,31 @@ test('generateGoogleSitesHtml embeds current questions, Voyage/Timer/Tornado par
   assert.ok(html.includes('LANGKAH 1'));
   assert.ok(html.includes('LANGKAH 2'));
 
-  // Admin tabs & CSV import parity without Publish & Embed or browser dialogs
+  // Admin tabs (5 tabs including Gamifikasi & Pengaturan & Tampilan) & CSV import parity without Publish & Embed or browser dialogs
   assert.ok(html.includes('Kontrol Sesi'));
+  assert.ok(html.includes('admin-tab-gamification'));
+  assert.ok(html.includes('admin-tab-settings'));
+  assert.ok(html.includes('Pengaturan &amp; Tampilan'));
+  assert.ok(html.includes('setting-gamification-enabled'));
+  assert.ok(html.includes('setting-streak-enabled'));
+  assert.ok(html.includes('setting-milestone-drops-enabled'));
+  assert.ok(html.includes('adminTogglePowerupItem'));
+  assert.ok(html.includes('adminApplyPowerupPreset'));
+  assert.ok(html.includes('adminToggleGamificationMechanic'));
+  assert.ok(html.includes('Hanya Skor 2x'));
+  assert.ok(html.includes('renderLobbyPowerups'));
+  assert.ok(html.includes('quiz-gamification-bar'));
   assert.ok(html.includes('Statistik &amp; Peserta'));
   assert.ok(html.includes('Bank Soal'));
   assert.ok(html.includes('Impor CSV / Excel'));
   assert.ok(html.includes('Ekspor Soal CSV'));
   assert.ok(html.includes('modal-admin-import'));
+  // Class room gate, mode differentiation, and waiting room parity
+  assert.ok(html.includes('lobby-room-gate'));
+  assert.ok(html.includes('lobby-room-gate-input'));
+  assert.ok(html.includes('submitLobbyRoomGate'));
+  assert.ok(html.includes('lobby-mode-panel-title'));
+  assert.ok(html.includes('waiting-room-badge'));
   assert.ok(!html.includes('Publish &amp; Embed'));
   assert.ok(!html.includes('Publish & Embed'));
   assert.ok(!html.includes('window.alert('));

@@ -1,18 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { Anchor, Compass, Gem, Navigation, Sparkles, Tornado, Waves } from 'lucide-react';
-import { rollWeightedPowerup } from '../quiz/engine';
+import { rollIslandRewardPowerup } from '../quiz/engine';
 import { POWERUP_CATALOG } from '../quiz/questions';
 import { playChestRewardFx, playPopClickFx } from '../quiz/soundFx';
 import type { PowerupId, VoyageCheckpoint } from '../quiz/types';
 
 export interface IslandMinigameReward {
-  powerupId: PowerupId;
+  powerupId: PowerupId | null;
   bonusPoints: number;
   islandName: string;
 }
 
 interface IslandMinigameModalProps {
   island: VoyageCheckpoint;
+  gamificationEnabled?: boolean;
+  enabledPowerups?: PowerupId[];
   onComplete: (reward: IslandMinigameReward) => void;
 }
 
@@ -27,6 +29,8 @@ const COMPASS_DIRS = [
 
 export const IslandMinigameModal: React.FC<IslandMinigameModalProps> = ({
   island,
+  gamificationEnabled = true,
+  enabledPowerups,
   onComplete,
 }) => {
   const gameKind: MinigameKind =
@@ -69,11 +73,11 @@ export const IslandMinigameModal: React.FC<IslandMinigameModalProps> = ({
 
   const grantIslandLoot = (bonusPoints: number, favorDebuff: boolean) => {
     playChestRewardFx();
-    const rolled: PowerupId = favorDebuff
-      ? Math.random() < 0.45
-        ? 'TORNADO'
-        : rollWeightedPowerup('debuff')
-      : rollWeightedPowerup();
+    const rolled = rollIslandRewardPowerup(
+      gamificationEnabled,
+      enabledPowerups,
+      favorDebuff
+    );
     setReward({
       powerupId: rolled,
       bonusPoints,
@@ -106,7 +110,8 @@ export const IslandMinigameModal: React.FC<IslandMinigameModalProps> = ({
     grantIslandLoot(matched ? 125 : 50, matched);
   };
 
-  const rewardSpec = reward ? POWERUP_CATALOG[reward.powerupId] : null;
+  const rewardSpec =
+    reward && reward.powerupId ? POWERUP_CATALOG[reward.powerupId] : null;
 
   return (
     <div
@@ -137,8 +142,10 @@ export const IslandMinigameModal: React.FC<IslandMinigameModalProps> = ({
                 <p className="text-xs text-slate-300 mb-4 leading-relaxed">
                   Awak kapal menemukan 3 peti peninggalan pelaut! Pilih{' '}
                   <strong className="text-amber-300">1 peti harta karun</strong>{' '}
-                  untuk mendapatkan Buff, Debuff (seperti Puting Beliung), dan
-                  poin pelayaran.
+                  {gamificationEnabled &&
+                  (!enabledPowerups || enabledPowerups.length > 0)
+                    ? 'untuk mendapatkan item aktif & bonus poin pelayaran.'
+                    : 'untuk mendapatkan bonus poin pelayaran!'}
                 </p>
                 <div className="grid grid-cols-3 gap-3">
                   {[0, 1, 2].map((idx) => (
@@ -235,29 +242,40 @@ export const IslandMinigameModal: React.FC<IslandMinigameModalProps> = ({
                   ) : (
                     <Sparkles className="w-4 h-4 text-amber-300" />
                   )}
-                  Hadiah Pulau: {rewardSpec?.name}
+                  {rewardSpec
+                    ? `Hadiah Pulau: ${rewardSpec.name}`
+                    : 'Hadiah Pulau: Harta Karun Ekspedisi'}
                 </span>
                 <span className="font-mono-num text-xs font-extrabold text-emerald-400">
                   +{reward.bonusPoints} Poin
                 </span>
               </div>
-              <p className="text-xs text-slate-300 leading-relaxed">
-                {rewardSpec?.desc}
-              </p>
-              <div className="mt-2 text-[11px] font-semibold text-slate-400">
-                Kategori:{' '}
-                <span
-                  className={
-                    rewardSpec?.kind === 'buff'
-                      ? 'text-emerald-400'
-                      : 'text-sky-400'
-                  }
-                >
-                  {rewardSpec?.kind === 'buff'
-                    ? 'Buff (Keuntungan)'
-                    : 'Debuff (Ganggu Lawan)'}
-                </span>
-              </div>
+              {rewardSpec ? (
+                <>
+                  <p className="text-xs text-slate-300 leading-relaxed">
+                    {rewardSpec.desc}
+                  </p>
+                  <div className="mt-2 text-[11px] font-semibold text-slate-400">
+                    Kategori:{' '}
+                    <span
+                      className={
+                        rewardSpec.kind === 'buff'
+                          ? 'text-emerald-400'
+                          : 'text-sky-400'
+                      }
+                    >
+                      {rewardSpec.kind === 'buff'
+                        ? 'Buff (Keuntungan)'
+                        : 'Debuff (Ganggu Lawan)'}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Ekspedisi pulau berhasil! Bonus poin langsung ditambahkan ke
+                  skor pelayaranmu.
+                </p>
+              )}
             </div>
 
             <button

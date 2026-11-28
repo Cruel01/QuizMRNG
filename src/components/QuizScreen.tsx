@@ -16,7 +16,7 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import { POWERUP_CATALOG } from '../quiz/questions';
+import { ALL_POWERUP_IDS, POWERUP_CATALOG } from '../quiz/questions';
 import {
   formatCountdownClock,
   getDebuffMilestones,
@@ -60,6 +60,10 @@ interface QuizScreenProps {
   selfDeviceId: string;
   showLiveLeaderboardToPlayers: boolean;
   onOpenLiveLeaderboard: () => void;
+  gamificationEnabled: boolean;
+  enabledPowerups?: PowerupId[];
+  streakEnabled?: boolean;
+  milestoneDropsEnabled?: boolean;
   currentStreak: number;
   compactMode: boolean;
   powerupInventory: (PowerupId | null)[];
@@ -122,6 +126,10 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
   selfDeviceId,
   showLiveLeaderboardToPlayers,
   onOpenLiveLeaderboard,
+  gamificationEnabled,
+  enabledPowerups = ALL_POWERUP_IDS,
+  streakEnabled = true,
+  milestoneDropsEnabled = true,
   currentStreak,
   compactMode,
   powerupInventory,
@@ -302,20 +310,21 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
         </div>
 
         <div className="flex items-center gap-3 shrink-0">
-          {(doubleScoreActive || immuneQuestionsRemaining > 0) && (
-            <div className="flex items-center gap-2 text-xs font-bold">
-              {doubleScoreActive && (
-                <span className="inline-flex items-center gap-1 text-amber-300">
-                  <Zap className="w-3.5 h-3.5" /> 2x
-                </span>
-              )}
-              {immuneQuestionsRemaining > 0 && (
-                <span className="inline-flex items-center gap-1 text-emerald-300">
-                  <Shield className="w-3.5 h-3.5" /> Perisai
-                </span>
-              )}
-            </div>
-          )}
+          {gamificationEnabled &&
+            (doubleScoreActive || immuneQuestionsRemaining > 0) && (
+              <div className="flex items-center gap-2 text-xs font-bold">
+                {doubleScoreActive && (
+                  <span className="inline-flex items-center gap-1 text-amber-300">
+                    <Zap className="w-3.5 h-3.5" /> 2x
+                  </span>
+                )}
+                {immuneQuestionsRemaining > 0 && (
+                  <span className="inline-flex items-center gap-1 text-emerald-300">
+                    <Shield className="w-3.5 h-3.5" /> Perisai
+                  </span>
+                )}
+              </div>
+            )}
 
           {/* Spinning Hourglass Timer (Global vs Per-Question) */}
           <div
@@ -439,50 +448,71 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
       )}
 
       {/* Inventory Buff & Debuff (Maks 2 Slot) + Segmented Streak Tracker */}
-      <div className="bg-[#131C31] border border-[#23304C] rounded-xl p-3 sm:px-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="space-y-1.5 min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-400">
-            <span className="inline-flex items-center gap-1 font-bold text-amber-300 shrink-0 font-mono-num">
-              <AnimatedFlameIcon
-                active={currentStreak > 0}
-                className="w-4 h-4 text-amber-400"
-              />
-              Streak {currentStreak}/{streakTarget}
-            </span>
-            {currentStreak >= 2 && (
-              <motion.span
-                key={`combo-${currentStreak}`}
-                initial={{ scale: 0.75, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                className="font-mono-num font-extrabold text-[11px] text-emerald-400"
-              >
-                Kombo x{currentStreak}!
-              </motion.span>
-            )}
-            <span className="text-slate-600" aria-hidden="true">
-              ·
-            </span>
-            <span>
-              Item tiap {streakTarget} benar
-              {milestones.length > 0 ? ` · Debuff #${milestones.join(', #')}` : ''}
-            </span>
-          </div>
+      {gamificationEnabled && enabledPowerups.length > 0 && (
+        <div
+          data-testid="quiz-gamification-bar"
+          className="bg-[#131C31] border border-[#23304C] rounded-xl p-3 sm:px-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+        >
+        {streakEnabled ? (
+          <div className="space-y-1.5 min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-400">
+              <span className="inline-flex items-center gap-1 font-bold text-amber-300 shrink-0 font-mono-num">
+                <AnimatedFlameIcon
+                  active={currentStreak > 0}
+                  className="w-4 h-4 text-amber-400"
+                />
+                Streak {currentStreak}/{streakTarget}
+              </span>
+              {currentStreak >= 2 && (
+                <motion.span
+                  key={`combo-${currentStreak}`}
+                  initial={{ scale: 0.75, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  className="font-mono-num font-extrabold text-[11px] text-emerald-400"
+                >
+                  Kombo x{currentStreak}!
+                </motion.span>
+              )}
+              <span className="text-slate-600" aria-hidden="true">
+                ·
+              </span>
+              <span>
+                {enabledPowerups.length === 1
+                  ? `${POWERUP_CATALOG[enabledPowerups[0]].name} tiap ${streakTarget} benar`
+                  : `Item tiap ${streakTarget} benar`}
+                {milestoneDropsEnabled &&
+                enabledPowerups.some(
+                  (id) => POWERUP_CATALOG[id]?.kind === 'debuff'
+                ) &&
+                milestones.length > 0
+                  ? ` · Debuff #${milestones.join(', #')}`
+                  : ''}
+              </span>
+            </div>
 
-          <div
-            className="grid gap-1 max-w-xs"
-            style={{ gridTemplateColumns: `repeat(${streakTarget}, minmax(0, 1fr))` }}
-            aria-hidden="true"
-          >
-            {Array.from({ length: streakTarget }).map((_, i) => (
-              <div
-                key={i}
-                className={`h-1 rounded-full transition-colors ${
-                  i < currentStreak ? 'bg-amber-400' : 'bg-[#0B1120]'
-                }`}
-              />
-            ))}
+            <div
+              className="grid gap-1 max-w-xs"
+              style={{ gridTemplateColumns: `repeat(${streakTarget}, minmax(0, 1fr))` }}
+              aria-hidden="true"
+            >
+              {Array.from({ length: streakTarget }).map((_, i) => (
+                <div
+                  key={i}
+                  className={`h-1 rounded-full transition-colors ${
+                    i < currentStreak ? 'bg-amber-400' : 'bg-[#0B1120]'
+                  }`}
+                />
+              ))}
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="min-w-0 flex-1 text-xs text-slate-300 font-medium">
+            Fitur aktif:{' '}
+            <span className="text-amber-300 font-bold">
+              {enabledPowerups.map((id) => POWERUP_CATALOG[id]?.name).join(', ')}
+            </span>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-2 w-full sm:w-80 shrink-0">
           {[0, 1].map((slotIdx) => {
@@ -527,6 +557,7 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
           })}
         </div>
       </div>
+      )}
 
       {/* Kartu Pertanyaan */}
       <motion.div
@@ -536,10 +567,14 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
         transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
         className={`relative bg-[#131C31] border border-[#23304C] rounded-2xl shadow-xl overflow-hidden ${
           compactMode ? 'p-4 sm:p-6' : 'p-5 sm:p-8'
-        } ${tornadoCountdown > 0 ? 'tornado-storm-active border-fuchsia-400/60' : ''}`}
+        } ${
+          gamificationEnabled && tornadoCountdown > 0
+            ? 'tornado-storm-active border-fuchsia-400/60'
+            : ''
+        }`}
       >
         {/* Banner Gangguan Puting Beliung (Tornado Debuff) */}
-        {tornadoCountdown > 0 && (
+        {gamificationEnabled && tornadoCountdown > 0 && (
           <div
             role="alert"
             className="mb-4 rounded-xl bg-fuchsia-500/15 border border-fuchsia-400/45 px-4 py-2.5 flex items-center justify-between gap-2 text-xs text-fuchsia-200"
@@ -558,7 +593,7 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
         )}
 
         {/* Overlay Beku (Freeze Debuff) */}
-        {isFrozen && (
+        {gamificationEnabled && isFrozen && (
           <div
             role="alert"
             className="absolute inset-0 z-30 bg-sky-950/95 backdrop-blur-sm flex flex-col items-center justify-center text-center p-6 border border-sky-400/40 rounded-2xl"

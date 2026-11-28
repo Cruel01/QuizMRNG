@@ -3,6 +3,15 @@ import type { PowerupId, PowerupSpec, Question, QuizSettings } from './types';
 export const ADMIN_PIN = '6767';
 export const MAX_POWERUP_SLOTS = 2;
 
+export const ALL_POWERUP_IDS: PowerupId[] = [
+  'DOUBLE_SCORE',
+  'FIFTY_FIFTY',
+  'SHIELD',
+  'FREEZE_LEADER',
+  'GLITCH_SHUFFLE',
+  'TORNADO',
+];
+
 export const DEFAULT_QUIZ_SETTINGS: QuizSettings = {
   allowReplay: false,
   shuffleQuestions: false,
@@ -14,6 +23,10 @@ export const DEFAULT_QUIZ_SETTINGS: QuizSettings = {
   gameplayMode: 'classic',
   participationMode: 'either',
   showLiveLeaderboardToPlayers: false,
+  gamificationEnabled: true,
+  enabledPowerups: [...ALL_POWERUP_IDS],
+  streakEnabled: true,
+  milestoneDropsEnabled: true,
 };
 
 export const DEFAULT_QUESTIONS: Question[] = [
